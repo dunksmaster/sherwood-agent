@@ -8,18 +8,25 @@
 //! The audit log is a hash chain. Each row's `hash` folds in the previous row's
 //! `hash`, so deleting or editing any row breaks verification from that point
 //! on. See [`SqliteStore::verify_audit_chain`].
+//!
+//! [`StoreSubscriber`] connects the store to the [event bus](sherwood_events):
+//! attach it and every fill and gate rejection is persisted without the
+//! producer knowing the store exists.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use sherwood_core::{Asset, Fill, OrderId, Portfolio, Side, Venue};
+use sherwood_events::{Envelope, Event, Subscriber, SubscriberError};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 
 /// `prev_hash` of the first audit row — 64 hex zeros.
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -363,6 +370,92 @@ impl Store for SqliteStore {
     }
 }
 
+/// Persists events from the [bus](sherwood_events) into the store: fills to the
+/// `fills` table, and `fill` / `decision` / `gate_reject` / `run_end` rows to
+/// the audit chain. The portfolio snapshot is written by the run loop directly,
+/// since it owns that state — the bus carries what other components need to
+/// observe, not everything.
+pub struct StoreSubscriber {
+    store: Arc<SqliteStore>,
+}
+
+impl StoreSubscriber {
+    pub fn new(store: Arc<SqliteStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl Subscriber for StoreSubscriber {
+    async fn handle(&mut self, env: &Envelope) -> Result<(), SubscriberError> {
+        match &env.event {
+            Event::OrderFilled(fill) => {
+                self.store.append_fill(fill).await?;
+                self.store
+                    .append_audit(
+                        "fill",
+                        json!({
+                            "order_id": fill.order_id.0,
+                            "symbol": fill.asset.symbol,
+                            "side": side_str(fill.side),
+                            "qty": fill.qty.to_string(),
+                            "price": fill.price.to_string(),
+                            "fee": fill.fee.to_string(),
+                        }),
+                    )
+                    .await?;
+            }
+            Event::RiskRejected {
+                order_id,
+                symbol,
+                reason,
+            } => {
+                self.store
+                    .append_audit(
+                        "gate_reject",
+                        json!({ "order_id": order_id.0, "symbol": symbol, "reason": reason }),
+                    )
+                    .await?;
+            }
+            Event::Decided {
+                tick,
+                price,
+                decision,
+            } => {
+                self.store
+                    .append_audit(
+                        "decision",
+                        json!({ "tick": tick, "price": price.to_string(), "decision": decision }),
+                    )
+                    .await?;
+            }
+            Event::RunEnded {
+                label,
+                interrupted,
+                cash,
+                realized_pnl,
+            } => {
+                self.store
+                    .append_audit(
+                        "run_end",
+                        json!({
+                            "label": label,
+                            "state": if *interrupted { "interrupted" } else { "done" },
+                            "cash": cash.to_string(),
+                            "realized_pnl": realized_pnl.to_string(),
+                        }),
+                    )
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    fn name(&self) -> &'static str {
+        "store"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -504,5 +597,59 @@ mod tests {
         s.append_fill(&f).await.unwrap();
         let got = s.fills().await.unwrap();
         assert_eq!(got[0].asset.address.as_deref(), Some("0xabc123"));
+    }
+
+    #[tokio::test]
+    async fn store_subscriber_persists_bus_events() {
+        use sherwood_events::{run_subscriber, Bus};
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("s.db");
+        let store = Arc::new(SqliteStore::open(&path).await.unwrap());
+        let bus = Bus::new(64);
+        let handle = tokio::spawn(run_subscriber(
+            bus.subscribe(),
+            StoreSubscriber::new(store.clone()),
+        ));
+
+        bus.publish(Event::Decided {
+            tick: 0,
+            price: dec!(100),
+            decision: "buy".into(),
+        });
+        bus.publish(Event::OrderFilled(fill(
+            "ROAR",
+            Side::Buy,
+            dec!(3),
+            dec!(10),
+        )));
+        bus.publish(Event::RiskRejected {
+            order_id: OrderId::new("o-2"),
+            symbol: "ROAR".into(),
+            reason: "notional cap".into(),
+        });
+        bus.publish(Event::RunEnded {
+            label: "t".into(),
+            interrupted: false,
+            cash: dec!(970),
+            realized_pnl: dec!(0),
+        });
+
+        drop(bus); // close the channel; the subscriber drains and returns
+        handle.await.unwrap();
+
+        assert_eq!(store.fills().await.unwrap().len(), 1);
+        assert!(matches!(
+            store.verify_audit_chain().await.unwrap(),
+            AuditVerification::Ok { entries: 4 }
+        ));
+        let kinds: Vec<String> = store
+            .audit_tail(4)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.kind)
+            .collect();
+        assert_eq!(kinds, ["decision", "fill", "gate_reject", "run_end"]);
     }
 }

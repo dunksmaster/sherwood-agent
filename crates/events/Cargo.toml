@@ -1,5 +1,5 @@
 [package]
-name = "sherwood-store"
+name = "sherwood-events"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -7,21 +7,15 @@ publish = false
 
 [dependencies]
 sherwood-core = { path = "../core" }
-sherwood-events = { path = "../events" }
-sqlx.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-sha2.workspace = true
-hex.workspace = true
-thiserror.workspace = true
+tokio = { workspace = true }
 chrono.workspace = true
+serde.workspace = true
+rust_decimal.workspace = true
 async-trait.workspace = true
 tracing.workspace = true
-rust_decimal.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true }
-tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "sync"] }
 rust_decimal_macros.workspace = true
 
 [lints]

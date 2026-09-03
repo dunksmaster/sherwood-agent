@@ -1202,10 +1202,10 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
- "serde_json",
  "sherwood-copytrade",
  "sherwood-core",
  "sherwood-decision",
+ "sherwood-events",
  "sherwood-execution",
  "sherwood-sniper",
  "sherwood-store",
@@ -1258,6 +1258,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sherwood-events"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "sherwood-core",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sherwood-execution"
 version = "0.1.0"
 dependencies = [
@@ -1298,6 +1312,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sherwood-core",
+ "sherwood-events",
  "sqlx",
  "tempfile",
  "thiserror",
