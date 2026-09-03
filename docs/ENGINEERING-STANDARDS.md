@@ -143,6 +143,10 @@ Pre-commit hooks run 1, 2, and 7 locally so CI is not the first place a failure 
 
 Applied to every PR:
 
+- [ ] **No scaffold, no padding.** Does this PR add behaviour a user or a test could observe?
+      If it only adds infrastructure "for later" — a trait with no working impl, a `pub` item
+      with no caller, a parsed-but-unused config field — it is too early. See
+      [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md).
 - [ ] Does any new order path bypass `RiskGate`? (If yes, reject.)
 - [ ] Are new errors classified into the taxonomy?
 - [ ] Is money `Decimal` throughout?

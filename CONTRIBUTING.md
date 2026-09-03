@@ -64,6 +64,8 @@ cargo deny check
 
 Every PR is checked against this. Reviewers will ask about any unticked box.
 
+- [ ] **No scaffold, no padding** — does this add observable behaviour, or only infrastructure
+      for later? See [`docs/DEFINITION-OF-DONE.md`](docs/DEFINITION-OF-DONE.md).
 - [ ] Does any new order path bypass `RiskGate`? **If yes, the PR is rejected.**
 - [ ] Are new errors classified as `Transient` / `Fatal` / `Rejected` / `Invariant`?
 - [ ] Is money `Decimal` throughout — no floats?

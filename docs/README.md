@@ -25,6 +25,7 @@ recorded rather than forgotten.
 | [CURRENT-STATE.md](CURRENT-STATE.md) | accepted | Honest audit of the scaffold: what is real, what is placeholder, known defects |
 | [ROADMAP.md](ROADMAP.md) | accepted | Phases, steps S0–S16, MVP v0.1 definition, non-goals, v0.2 outline |
 | [GRADE-TARGET.md](GRADE-TARGET.md) | accepted | The B (70+) licensing target, rubric dimensions mapped to roadmap steps |
+| [DEFINITION-OF-DONE.md](DEFINITION-OF-DONE.md) | accepted | What "done" means per step — the rules that keep code from reading as scaffold |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | accepted | Crate map, data flow, event bus, risk-gate choke point, error taxonomy |
 | [DECISIONS.md](DECISIONS.md) | accepted | ADR index and the running decision log |
 
