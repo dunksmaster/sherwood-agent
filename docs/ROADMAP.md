@@ -91,14 +91,14 @@ from `GRADE-TARGET.md`.
 
 ## S1–S3 — foundation
 
-| Step | Task | Crate |
-|---|---|---|
-| S1.1 | Schema: `portfolio_snapshots`, `fills`, `audit_log`, `cursors`, `config_state`, `pending_approvals` | `store` |
-| S1.2 | `Store` trait — append-only guarantee for the audit table | `store` |
-| S1.3 | `SqliteStore` via `sqlx` with compile-time query checking | `store` |
-| S1.4 | Hash-chained audit log — each row carries `prev_hash` and `hash = sha256(prev_hash ‖ data)` | `store` |
-| S1.5 | External anchoring hook (no-op stub for v0.1) | `store` |
-| S1.6 | `Portfolio` round-trip serialization, property-tested | `core`, `store` |
+| Step | Task | Crate | Status |
+|---|---|---|---|
+| S1.1 | Schema — `portfolio_snapshots`, `fills`, `audit_log`. (`cursors` / `config_state` / `pending_approvals` deferred to S5 / S2 / S11, since an unused table is scaffold.) | `store` | done |
+| S1.2 | `Store` trait — no `UPDATE`/`DELETE` path for the audit table | `store` | done |
+| S1.3 | `SqliteStore` via `sqlx`, compile-time-checked queries, committed `.sqlx/` offline cache (`SQLX_OFFLINE` in CI) | `store` | done |
+| S1.4 | Hash-chained `audit_log` + `verify_audit_chain`; tamper test | `store` | done |
+| S1.5 | External anchoring of the chain head | `store` | deferred (hardening) |
+| S1.6 | `Portfolio` is `serde`-serialisable; JSON round-trip test; wired into `run` (resume from snapshot, persist fills + audit + exit snapshot) | `core`, `store`, `cli` | done |
 | S2.1 | `AppConfig` with real validation — range checks, overlap checks, actionable errors | `config` |
 | S2.2 | Config reload via `notify`, broadcasting a change event | `config` |
 | S2.3 | Config schema versioning with migration stubs | `config` |

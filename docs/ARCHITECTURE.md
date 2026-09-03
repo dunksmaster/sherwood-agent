@@ -37,7 +37,7 @@ flowchart TB
 |---|---|---|
 | `sherwood-core` | Domain types, `Portfolio`, `RiskGate`, spend controls, `Clock` and `PriceFeed` traits. **No I/O.** | — |
 | `sherwood-events` | Internal async bus. Every component publishes and subscribes; nothing calls another component directly. | `core` |
-| `sherwood-store` | SQLite persistence behind a `Store` trait: config, orders, fills, positions, hash-chained audit. | `core` |
+| `sherwood-store` | SQLite persistence behind a `Store` trait: portfolio snapshots, fill history, hash-chained audit log. Config / cursors / approvals tables land at S2 / S5 / S11. See [DATA-MODEL.md](DATA-MODEL.md). | `core` |
 | `sherwood-config` | Typed configuration, validated bounds, versioning, change broadcast. | `core`, `events` |
 | `sherwood-secrets` | Credential vault — OS keyring or `age`. Config holds references; values resolve at runtime. | — |
 | `sherwood-decision` | `Decider` trait, `RuleDecider`, `AiDecider`, provider adapters. | `core` |

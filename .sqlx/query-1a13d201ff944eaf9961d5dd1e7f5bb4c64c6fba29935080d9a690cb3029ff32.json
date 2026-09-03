@@ -1,0 +1,122 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT order_id, symbol, address, side, qty, price, fee, venue, filled_at\n             FROM fills ORDER BY id ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "order_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "order_id"
+          }
+        }
+      },
+      {
+        "name": "symbol",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "symbol"
+          }
+        }
+      },
+      {
+        "name": "address",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "address"
+          }
+        }
+      },
+      {
+        "name": "side",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "side"
+          }
+        }
+      },
+      {
+        "name": "qty",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "qty"
+          }
+        }
+      },
+      {
+        "name": "price",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "price"
+          }
+        }
+      },
+      {
+        "name": "fee",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "fee"
+          }
+        }
+      },
+      {
+        "name": "venue",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "venue"
+          }
+        }
+      },
+      {
+        "name": "filled_at",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "fills",
+            "name": "filled_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1a13d201ff944eaf9961d5dd1e7f5bb4c64c6fba29935080d9a690cb3029ff32"
+}

@@ -9,8 +9,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood-store` (S1)** — SQLite persistence via `sqlx` behind a `Store` trait:
+  portfolio snapshots, fill history, and a hash-chained tamper-evident `audit_log`
+  with `verify_audit_chain`. Compile-time-checked queries against a committed
+  `.sqlx/` offline cache; `SQLX_OFFLINE` in CI so no database is needed.
+- `sherwood run` with `[general] state_path` set now persists: it resumes from the
+  last portfolio snapshot, records every fill and gate rejection to the audit
+  chain, and snapshots on exit (clean interrupt included).
+- `Portfolio` is `serde`-serialisable, with a JSON round-trip test.
 - Pre-S0 repository hygiene: committed `Cargo.lock`, `deny.toml`, Renovate config,
   workspace lint manifest, `CODEOWNERS`, PR and issue templates, `CLAUDE.md`.
+- Repository made public; branch protection enabled on `main`.
 - CI expanded: MSRV 1.80 build, `cargo-deny` (licences + RustSec advisories + bans +
   sources), CycloneDX SBOM, `gitleaks`, a coverage report, and a doc-link check.
 

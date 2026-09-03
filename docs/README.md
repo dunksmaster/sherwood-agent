@@ -54,6 +54,12 @@ recorded rather than forgotten.
 | [PRIOR-ART.md](PRIOR-ART.md) | accepted | Every project studied, its licence, and whether any code was used |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) | accepted | Contribution process and CLA |
 
+## Implementation
+
+| Document | Status | What it covers |
+|---|---|---|
+| [DATA-MODEL.md](DATA-MODEL.md) | accepted | `sherwood-store` schema, migrations, the audit hash-chain, regenerating the sqlx offline cache |
+
 ## Operations
 
 | Document | Status | What it covers |
@@ -64,7 +70,6 @@ recorded rather than forgotten.
 
 | Document | Filled at | Purpose |
 |---|---|---|
-| [DATA-MODEL.md](DATA-MODEL.md) | S1 | Store schema, migrations, audit hash-chain |
 | [RUNTIME.md](RUNTIME.md) | S3 | Event bus, event schema + versioning, supervisor, scheduler, approval state machine |
 | [ROBINHOOD-API.md](ROBINHOOD-API.md) | S7 | Asset classes, order types, settlement, rate limits, error codes |
 | [API.md](API.md) | S9 | HTTP API — generated from `utoipa`, not hand-written |
