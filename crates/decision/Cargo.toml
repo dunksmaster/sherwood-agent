@@ -1,0 +1,17 @@
+[package]
+name = "sherwood-decision"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sherwood-core = { path = "../core" }
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

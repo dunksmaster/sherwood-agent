@@ -1,0 +1,25 @@
+[package]
+name = "sherwood-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "sherwood"
+path = "src/main.rs"
+
+[dependencies]
+sherwood-core = { path = "../core" }
+sherwood-execution = { path = "../execution" }
+sherwood-decision = { path = "../decision" }
+sherwood-copytrade = { path = "../copytrade" }
+sherwood-sniper = { path = "../sniper" }
+anyhow.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde.workspace = true
+toml.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true

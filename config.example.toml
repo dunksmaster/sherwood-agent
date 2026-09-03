@@ -1,0 +1,29 @@
+# sherwood-agent example config. Copy to config.toml (gitignored) and edit.
+# The bundled runner is PAPER ONLY. `mode` must be "paper".
+
+[general]
+starting_cash = 1000
+mode = "paper"
+
+[risk]
+# Every generated order is checked against these before it can be executed.
+max_order_notional    = 100      # cash-asset cap on a single order
+max_position_fraction = 0.10     # max share of equity in one asset
+max_daily_loss        = 50       # session realized-loss circuit breaker
+max_slippage          = 0.02     # reject orders asking for more tolerance
+allowlist             = []       # non-empty = only these symbols tradable
+denylist              = []       # never trade these
+kill_switch           = false    # true = reject everything
+
+[copytrade]
+# Leader wallet addresses to mirror (lower-cased on load).
+leaders               = []
+fixed_fraction        = 0.25     # mirror 25% of a leader's traded qty
+min_leader_notional   = 25       # ignore leader dust below this
+max_mirror_notional   = 100      # hard cap per mirrored order
+slippage              = 0.01
+
+[sniper]
+enabled               = false
+min_initial_liquidity = 5000
+entry_notional        = 50

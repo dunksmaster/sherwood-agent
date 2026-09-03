@@ -1,0 +1,17 @@
+/target
+**/*.rs.bk
+Cargo.lock
+
+# secrets / local config
+config.toml
+.env
+.env.*
+*.pem
+*.key
+wallet*.json
+keypair*.json
+
+# logs / state
+*.log
+/data
+/state
