@@ -1,0 +1,144 @@
+---
+status: accepted
+last-updated: 2026-09-03
+owner-step: S0
+---
+
+# Security
+
+This software places orders against a funded brokerage account. Security failures here cost
+money directly. The threat analysis lives in [THREAT-MODEL.md](THREAT-MODEL.md); model-
+specific concerns in [AI-SAFETY.md](AI-SAFETY.md). This document is the architecture and
+the policy.
+
+## Reporting a vulnerability
+
+Do not open a public issue. Use GitHub's private vulnerability reporting on this repository
+("Report a vulnerability" under the Security tab). Include impact, reproduction, and affected
+versions. Please allow a reasonable window before public disclosure.
+
+Areas of particular interest: anything that lets an order reach a venue without passing
+`RiskGate`; credential handling; the local API and hook surface; the release pipeline.
+
+Out of scope: trading losses from strategy decisions or market risk.
+
+## Core invariants
+
+These are the properties the design exists to preserve. A change that breaks one is a
+security defect regardless of intent.
+
+1. **No order reaches a venue without passing `RiskGate::check`.**
+2. **Every control fails closed.** Unreachable, errored, or ambiguous means "do not trade".
+3. **Credentials never enter the codebase, the database, logs, or API responses.**
+4. **The audit log is append-only and tamper-evident.**
+5. **Live mode is never the default and never implicit.**
+
+## Credentials
+
+v0.1 uses Robinhood OAuth. There are no private keys — Robinhood custodies the assets. The
+credential surface is therefore: the OAuth grant, the NVIDIA (or other provider) API key, and
+the local API token.
+
+| Rule | Detail |
+|---|---|
+| Storage | OS keyring, or an `age`-encrypted file. Never plaintext on disk. |
+| Configuration | `config.toml` holds *references* (`secret = "keyring:nvidia_api_key"`), never values. |
+| In memory | Minimum lifetime. Wrapped in a type that zeroes on drop and whose `Debug` prints `[redacted]`. |
+| Logs | A `tracing` layer scrubs known secret shapes. Secrets are never formatted into errors. |
+| API | Write-only. The dashboard can set a secret; no endpoint returns one. The UI shows `••••••` plus a "set / not set" state. |
+| Rotation | Any secret can be replaced without a restart, via config reload. |
+| Revocation | Losing the OAuth grant is a `Fatal` error: halt, emit `SessionStateChanged`, require operator re-consent. Never silently retry a 401. |
+
+Under [ADR-0001](adr/0001-mcp-interaction-model.md) Option 3, the OAuth grant lives inside the
+CLI agent's own credential store and never reaches our code at all. That is a principal
+reason to prefer it.
+
+Key custody tiers (paper → hot → hardware → HSM) are a **v0.2** concern and arrive with
+Solana. They are deliberately absent from v0.1 because v0.1 holds no keys.
+
+## Spend controls
+
+Enforced in `sherwood-core`, independent of any strategy or model, and evaluated on every
+order:
+
+- Maximum notional per order
+- Maximum notional per day
+- Maximum notional per symbol per day
+- Maximum concurrent open positions
+- Per-symbol cooldown between orders
+- Realized **and unrealized** daily-loss circuit breaker
+- Per-run budgets: maximum orders, maximum notional, maximum duration
+
+Defaults are deliberately small. Raising them is a config change that is recorded in the
+audit log.
+
+## Kill switch
+
+Reachable three ways, all converging on the same halt:
+
+1. A button in the dashboard (admin role, confirmation dialog).
+2. `sherwood kill` on the command line.
+3. A sentinel file on disk — checked on every gate evaluation, so it works even if the
+   server is wedged.
+
+Engaging it rejects every order immediately and emits `KillSwitchToggled`. Disengaging
+requires the admin role and is audited. Recovery procedure lives in
+[RUNBOOK.md](RUNBOOK.md).
+
+## Local API
+
+- Binds `127.0.0.1` by default. Any other bind requires TLS and is refused otherwise.
+- Bearer token, generated on first run, stored in the keyring, compared in constant time.
+- RBAC — `viewer` (read), `operator` (approve, deny), `admin` (config, live toggle, kill
+  switch). Wired from S9 even though v0.1 has one user, so that adding users later is not a
+  redesign.
+- The live toggle and the kill switch require the admin role **and** re-authentication.
+- CORS restricted to the local origin. Strict CSP on the frontend. No external script or
+  style origins.
+- Rate limiting per IP and per token, on both REST and WebSocket upgrade.
+
+## The approval hook
+
+Under ADR-0001 Option 3 the `PreToolUse` hook is the only thing between the agent and the
+venue. It is treated as security-critical:
+
+- **Fails closed.** No response, a timeout, or a malformed response means deny.
+- **Tool allowlist.** Only explicitly named venue tools are gated *and* permitted; an
+  unrecognised tool name is denied, not passed through.
+- Authenticated with the local token; an unauthenticated hook call is denied and alerted.
+- Its own timeout must exceed the approval timeout, and the agent's hook timeout must exceed
+  both, or a slow human approval is silently converted into a denial.
+
+## Data at rest
+
+- SQLite encrypted with SQLCipher (feature-gated) or relying on full-disk encryption; the
+  choice is recorded per deployment.
+- Backups are encrypted; the backup key is stored separately from the backups and its
+  recovery procedure is documented in the runbook.
+- Order history and account identifiers are treated as sensitive personal data.
+- Retention: market snapshots default to 90 days; audit and fills are retained indefinitely.
+
+## Supply chain
+
+- `cargo-deny` — licences, advisories, bans, source allowlist.
+- `cargo-audit` and `osv-scanner` (frontend) in CI.
+- Lockfiles committed; Renovate proposes updates.
+- SBOM (CycloneDX) generated per release and attached to the release.
+- `gitleaks` in CI and as a pre-commit hook.
+- Signed tags; release provenance via GitHub OIDC.
+
+## Disclosure posture
+
+The repository is currently **public**. Publishing the architecture and threat model of a
+system that trades a real account is a modest operational-security cost: it tells a reader
+exactly what to attack and that the operator runs it.
+
+**Recommendation: make the repository private until at least v0.1 is hardened.** Opening it
+later is always possible; un-publishing is not. This is recorded as standing question Q7 in
+[DECISIONS.md](DECISIONS.md).
+
+## Non-goals for v0.1
+
+Multi-user identity, SSO, hardware custody, HSM or MPC signing, regulatory compliance
+tooling, and cloud multi-tenancy are explicitly out of scope. RBAC is wired but exercised by
+a single operator.
