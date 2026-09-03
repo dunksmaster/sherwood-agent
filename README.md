@@ -82,6 +82,7 @@ sherwood-agent/
 ├── crates/
 │   ├── core/         domain types, Portfolio, RiskGate  (no I/O)
 │   ├── store/        SQLite persistence + hash-chained audit log (sqlx)
+│   ├── events/       internal event bus (broadcast) + Subscriber trait
 │   ├── execution/    Executor trait, PaperExecutor, LiveExecutor stub
 │   ├── decision/     Decider trait, RuleDecider, AiDecider
 │   ├── copytrade/    library scaffold — deferred to v0.2
@@ -93,7 +94,7 @@ sherwood-agent/
 └── rust-toolchain.toml
 ```
 
-Planned crates (not yet written): `config`, `events`, `supervisor`, `secrets`,
+Planned crates (not yet written): `config`, `supervisor`, `secrets`,
 `runtime`, `server`, plus a `frontend/`. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Prerequisites

@@ -17,12 +17,12 @@ one rather than editing it.
 | [0001](adr/0001-mcp-interaction-model.md) | MCP interaction model | accepted 2026-09-03 | — |
 | [0002](adr/0002-ai-decision-mode.md) | AI decision mode | accepted 2026-09-03 | — |
 | [0003](adr/0003-storage-backend.md) | Storage backend | accepted 2026-09-03 | — |
+| [0004](adr/0004-event-schema-versioning.md) | Event schema versioning | accepted 2026-09-04 | — |
 
 Planned, to be written when the step that needs them arrives:
 
 | ADR | Title | Written at |
 |---|---|---|
-| 0004 | Event schema versioning | S3 |
 | 0005 | Approval gate state machine | S11 |
 | 0006 | Frontend state management | S10 |
 | 0007 | Deployment and packaging | S15 |

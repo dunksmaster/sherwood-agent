@@ -99,15 +99,15 @@ from `GRADE-TARGET.md`.
 | S1.4 | Hash-chained `audit_log` + `verify_audit_chain`; tamper test | `store` | done |
 | S1.5 | External anchoring of the chain head | `store` | deferred (hardening) |
 | S1.6 | `Portfolio` is `serde`-serialisable; JSON round-trip test; wired into `run` (resume from snapshot, persist fills + audit + exit snapshot) | `core`, `store`, `cli` | done |
-| S2.1 | `AppConfig` with real validation — range checks, overlap checks, actionable errors | `config` |
-| S2.2 | Config reload via `notify`, broadcasting a change event | `config` |
-| S2.3 | Config schema versioning with migration stubs | `config` |
-| S2.4 | Secret references resolved at load time, never stored inline | `config` |
-| S3.1 | Event bus — tokio `broadcast`, bounded at 1000, documented backpressure policy | `events` |
-| S3.2 | Core event types, each carrying a `version` field | `events` |
-| S3.3 | `EventBus` trait plus the tokio implementation; audit log becomes one subscriber | `events` |
-| S3.4 | `Supervisor` trait — `start`, `stop`, `health_check` | `supervisor` |
-| S3.5 | Config-driven component startup | `supervisor` |
+| S2.1 | `AppConfig` with real validation — range checks, overlap checks, actionable errors | `cli` | done (Pre-S0) |
+| S2.2 | Config reload via `notify`, broadcasting a change event | `config` | deferred to S4 — no long-lived config consumer yet |
+| S2.3 | Config schema versioning with migration stubs | `config` | deferred to S4 |
+| S2.4 | Secret references resolved at load time, never stored inline | `config` | deferred to S6 — needs the secrets vault |
+| S3.1 | Event bus — `broadcast`, bounded 1000, backpressure policy, `Bus` handle | `events` | done |
+| S3.2 | `Event` (real emitters + consumers only), versioned `Envelope` ([ADR-0004](adr/0004-event-schema-versioning.md)) | `events` | done |
+| S3.3 | `Subscriber` trait + `run_subscriber`; `TracingSubscriber`; `StoreSubscriber`; run loop publishes instead of calling the store | `events`, `store`, `cli` | done |
+| S3.4 | `Supervisor` trait — `start`, `stop`, `health_check` | `supervisor` | deferred to S4 — nothing multi-component to supervise yet |
+| S3.5 | Config-driven component startup | `supervisor` | deferred to S4 |
 
 ## S4–S5 — decision layer and the paper loop
 

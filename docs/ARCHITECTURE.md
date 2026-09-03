@@ -61,23 +61,23 @@ A crate may not depend on a sibling at the same layer — they communicate throu
 
 ## Event bus
 
-Components are decoupled through a bounded tokio `broadcast` channel. Consequences:
+Built in S3 as `sherwood-events`. Components are decoupled through a bounded tokio
+`broadcast` channel (capacity 1000). Consequences:
 
-- Adding a strategy is one config entry plus one trait implementation. No wiring changes.
-- The audit log is **one subscriber**. So are metrics, notifications, and the WebSocket feed.
+- Adding a metrics sink, a notifier, or a persistence layer is **one new subscriber** — no
+  change to any producer.
 - Splitting into separate services later means swapping the bus implementation, not
   rewriting callers.
 
-Core event types (each carries a `version: u16` — see `RUNTIME.md`, filled at S3):
+The full event catalogue, the versioning rule, the backpressure policy, and the current
+subscribers live in [RUNTIME.md](RUNTIME.md#event-bus--sherwood-events). In short: v1 has
+four variants (`Decided`, `OrderFilled`, `RiskRejected`, `RunEnded`), each with a real
+emitter and a real consumer; every message is a versioned `Envelope`
+([ADR-0004](adr/0004-event-schema-versioning.md)); a slow or failing subscriber is logged
+and skipped, never fatal.
 
-`MarketSnapshotReceived` · `DecisionMade` · `OrderProposed` · `RiskChecked` ·
-`ApprovalRequested` · `ApprovalResolved` · `OrderSubmitted` · `OrderStatusChanged` ·
-`OrderExecuted` · `PortfolioUpdated` · `KillSwitchToggled` · `ConfigChanged` ·
-`SessionStateChanged` · `BackpressureWarning`
-
-**Backpressure policy:** bounded at 1000. On overflow the oldest events are dropped and a
-`BackpressureWarning` is emitted. The audit subscriber is the exception — audit writes are
-synchronous on the critical path, because a dropped audit entry is a correctness failure.
+The portfolio **snapshot** is written to the store directly by the run loop, not through
+the bus — the loop owns that state. The bus carries what *other* components need to observe.
 
 ## Error taxonomy
 

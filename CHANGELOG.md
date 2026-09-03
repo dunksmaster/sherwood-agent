@@ -9,6 +9,12 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood-events` (S3)** — internal bus (`tokio::sync::broadcast`, bounded 1000)
+  behind a `Subscriber` trait. Four event variants, each with a real emitter and
+  consumer; every message a versioned `Envelope` (ADR-0004). `TracingSubscriber`
+  (always on) and `StoreSubscriber` (persists fills + audit rows). A slow or failing
+  subscriber is logged, never fatal. The run loop now publishes events instead of
+  calling the store directly.
 - **`sherwood-store` (S1)** — SQLite persistence via `sqlx` behind a `Store` trait:
   portfolio snapshots, fill history, and a hash-chained tamper-evident `audit_log`
   with `verify_audit_chain`. Compile-time-checked queries against a committed
