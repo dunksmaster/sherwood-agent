@@ -97,7 +97,10 @@ impl Decider for RuleDecider {
                     if ret >= self.cfg.take_profit {
                         return Decision::Sell {
                             fraction: dec!(1),
-                            reason: format!("take-profit hit ({ret:+} >= {})", self.cfg.take_profit),
+                            reason: format!(
+                                "take-profit hit ({ret:+} >= {})",
+                                self.cfg.take_profit
+                            ),
                         };
                     }
                     if ret <= self.cfg.stop_loss {
@@ -108,14 +111,19 @@ impl Decider for RuleDecider {
                     }
                 }
             }
-            return Decision::Hold { reason: "holding open position".into() };
+            return Decision::Hold {
+                reason: "holding open position".into(),
+            };
         }
 
         // Flat: consider entry on momentum.
         if s.change_24h >= self.cfg.entry_momentum {
             return Decision::Buy {
                 fraction: self.cfg.entry_fraction,
-                reason: format!("24h momentum {:+} >= {}", s.change_24h, self.cfg.entry_momentum),
+                reason: format!(
+                    "24h momentum {:+} >= {}",
+                    s.change_24h, self.cfg.entry_momentum
+                ),
             };
         }
 
@@ -129,9 +137,8 @@ impl Decider for RuleDecider {
     }
 }
 
-type AiCall = Box<
-    dyn Fn(&DecisionContext) -> Pin<Box<dyn Future<Output = Decision> + Send>> + Send + Sync,
->;
+type AiCall =
+    Box<dyn Fn(&DecisionContext) -> Pin<Box<dyn Future<Output = Decision> + Send>> + Send + Sync>;
 
 /// Adapter around a caller-provided LLM call. The closure owns the API client,
 /// the prompt, and the parsing of the model's reply into a [`Decision`].
@@ -168,7 +175,12 @@ mod tests {
     use chrono::Utc;
     use sherwood_core::Asset;
 
-    fn ctx(price: Decimal, change: Decimal, pos: Decimal, cost: Option<Decimal>) -> DecisionContext {
+    fn ctx(
+        price: Decimal,
+        change: Decimal,
+        pos: Decimal,
+        cost: Option<Decimal>,
+    ) -> DecisionContext {
         DecisionContext {
             snapshot: MarketSnapshot {
                 asset: Asset::symbol("ROAR"),
@@ -193,14 +205,18 @@ mod tests {
     #[tokio::test]
     async fn takes_profit_on_open_position() {
         let d = RuleDecider::new(RuleConfig::default());
-        let out = d.decide(&ctx(dec!(13), dec!(0.0), dec!(5), Some(dec!(10)))).await;
+        let out = d
+            .decide(&ctx(dec!(13), dec!(0.0), dec!(5), Some(dec!(10))))
+            .await;
         assert!(matches!(out, Decision::Sell { fraction, .. } if fraction == dec!(1)));
     }
 
     #[tokio::test]
     async fn stops_out_on_open_position() {
         let d = RuleDecider::new(RuleConfig::default());
-        let out = d.decide(&ctx(dec!(8), dec!(0.0), dec!(5), Some(dec!(10)))).await;
+        let out = d
+            .decide(&ctx(dec!(8), dec!(0.0), dec!(5), Some(dec!(10))))
+            .await;
         assert!(matches!(out, Decision::Sell { .. }));
     }
 
@@ -215,8 +231,13 @@ mod tests {
     #[tokio::test]
     async fn ai_decider_delegates_to_closure() {
         let d = AiDecider::new(|_ctx| async {
-            Decision::Hold { reason: "model said wait".into() }
+            Decision::Hold {
+                reason: "model said wait".into(),
+            }
         });
-        assert!(matches!(d.decide(&ctx(dec!(1), dec!(1), dec!(0), None)).await, Decision::Hold { .. }));
+        assert!(matches!(
+            d.decide(&ctx(dec!(1), dec!(1), dec!(0), None)).await,
+            Decision::Hold { .. }
+        ));
     }
 }

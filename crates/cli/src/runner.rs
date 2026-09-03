@@ -48,7 +48,11 @@ async fn run_loop(
 
     for (i, px) in prices.iter().enumerate() {
         exec.set_price(asset.symbol.clone(), *px);
-        let change_24h = if prev > dec!(0) { (*px - prev) / prev } else { dec!(0) };
+        let change_24h = if prev > dec!(0) {
+            (*px - prev) / prev
+        } else {
+            dec!(0)
+        };
 
         let pos = portfolio.position(&asset);
         let equity = portfolio.equity(|s| (s == asset.symbol).then_some(*px));
@@ -61,8 +65,12 @@ async fn run_loop(
                 at: Utc::now(),
             },
             position: pos,
-            avg_cost: None,
-            position_fraction: if equity > dec!(0) { pos * *px / equity } else { dec!(0) },
+            avg_cost: portfolio.avg_cost(&asset),
+            position_fraction: if equity > dec!(0) {
+                pos * *px / equity
+            } else {
+                dec!(0)
+            },
         };
 
         let decision = decider.decide(&ctx).await;

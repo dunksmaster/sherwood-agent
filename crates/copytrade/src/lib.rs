@@ -61,7 +61,10 @@ pub enum Sizing {
     FixedFraction(Decimal),
     /// Match the leader's *portfolio weight* change, scaled to our equity.
     /// Falls back to `FixedFraction(fallback)` when leader equity is unknown.
-    ProportionalToEquity { our_equity: Decimal, fallback: Decimal },
+    ProportionalToEquity {
+        our_equity: Decimal,
+        fallback: Decimal,
+    },
     /// Always spend a fixed cash notional per mirrored entry.
     FixedNotional(Decimal),
 }
@@ -87,11 +90,7 @@ impl CopyTrader {
     /// Translate one observed trade into an [`Order`], or explain the skip.
     ///
     /// `held_qty` is our current position in the asset (for sell filtering).
-    pub fn mirror(
-        &mut self,
-        t: &ObservedTrade,
-        held_qty: Decimal,
-    ) -> Result<Order, SkipReason> {
+    pub fn mirror(&mut self, t: &ObservedTrade, held_qty: Decimal) -> Result<Order, SkipReason> {
         if !self.cfg.leaders.contains(&t.leader.to_lowercase()) {
             return Err(SkipReason::UnknownLeader);
         }
@@ -108,7 +107,10 @@ impl CopyTrader {
         let mut qty = match self.cfg.sizing {
             Sizing::FixedFraction(f) => t.qty * f,
             Sizing::FixedNotional(n) => n / t.price,
-            Sizing::ProportionalToEquity { our_equity, fallback } => match t.leader_equity {
+            Sizing::ProportionalToEquity {
+                our_equity,
+                fallback,
+            } => match t.leader_equity {
                 Some(le) if le > dec!(0) => {
                     let leader_weight = (t.qty * t.price) / le;
                     (leader_weight * our_equity) / t.price
@@ -182,13 +184,18 @@ mod tests {
         let mut ct = CopyTrader::new(cfg(Sizing::FixedFraction(dec!(0.5))));
         let mut t = trade(Side::Buy, dec!(10), dec!(5));
         t.leader = "0xstranger".into();
-        assert_eq!(ct.mirror(&t, dec!(0)).unwrap_err(), SkipReason::UnknownLeader);
+        assert_eq!(
+            ct.mirror(&t, dec!(0)).unwrap_err(),
+            SkipReason::UnknownLeader
+        );
     }
 
     #[test]
     fn fixed_fraction_halves_quantity() {
         let mut ct = CopyTrader::new(cfg(Sizing::FixedFraction(dec!(0.5))));
-        let o = ct.mirror(&trade(Side::Buy, dec!(10), dec!(5)), dec!(0)).unwrap();
+        let o = ct
+            .mirror(&trade(Side::Buy, dec!(10), dec!(5)), dec!(0))
+            .unwrap();
         assert_eq!(o.qty, dec!(5));
         assert_eq!(o.side, Side::Buy);
     }
@@ -197,14 +204,18 @@ mod tests {
     fn caps_mirror_notional() {
         let mut ct = CopyTrader::new(cfg(Sizing::FixedFraction(dec!(1))));
         // 500 * 5 = 2500 notional, cap is 1000 -> qty becomes 200
-        let o = ct.mirror(&trade(Side::Buy, dec!(500), dec!(5)), dec!(0)).unwrap();
+        let o = ct
+            .mirror(&trade(Side::Buy, dec!(500), dec!(5)), dec!(0))
+            .unwrap();
         assert_eq!(o.qty, dec!(200));
     }
 
     #[test]
     fn sell_is_clamped_to_held_quantity() {
         let mut ct = CopyTrader::new(cfg(Sizing::FixedFraction(dec!(1))));
-        let o = ct.mirror(&trade(Side::Sell, dec!(100), dec!(5)), dec!(30)).unwrap();
+        let o = ct
+            .mirror(&trade(Side::Sell, dec!(100), dec!(5)), dec!(30))
+            .unwrap();
         assert_eq!(o.qty, dec!(30));
     }
 

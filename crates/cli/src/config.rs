@@ -30,7 +30,10 @@ pub struct General {
 
 impl Default for General {
     fn default() -> Self {
-        Self { starting_cash: Decimal::from(1_000), mode: "paper".into() }
+        Self {
+            starting_cash: Decimal::from(1_000),
+            mode: "paper".into(),
+        }
     }
 }
 

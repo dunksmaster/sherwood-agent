@@ -16,11 +16,17 @@ pub struct Asset {
 
 impl Asset {
     pub fn symbol(s: impl Into<String>) -> Self {
-        Self { symbol: s.into(), address: None }
+        Self {
+            symbol: s.into(),
+            address: None,
+        }
     }
 
     pub fn onchain(symbol: impl Into<String>, address: impl Into<String>) -> Self {
-        Self { symbol: symbol.into(), address: Some(address.into()) }
+        Self {
+            symbol: symbol.into(),
+            address: Some(address.into()),
+        }
     }
 }
 
@@ -145,8 +151,16 @@ pub enum SignalKind {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Decision {
     /// Open or add to a position sized as a fraction of equity.
-    Buy { fraction: Decimal, reason: String },
+    Buy {
+        fraction: Decimal,
+        reason: String,
+    },
     /// Close or trim a position by a fraction of the current holding.
-    Sell { fraction: Decimal, reason: String },
-    Hold { reason: String },
+    Sell {
+        fraction: Decimal,
+        reason: String,
+    },
+    Hold {
+        reason: String,
+    },
 }

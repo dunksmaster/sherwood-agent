@@ -64,14 +64,21 @@ struct PaperState {
 impl PaperExecutor {
     pub fn new(spread_bps: Decimal, fee_bps: Decimal) -> Self {
         Self {
-            inner: Mutex::new(PaperState { prices: Default::default(), seq: 0 }),
+            inner: Mutex::new(PaperState {
+                prices: Default::default(),
+                seq: 0,
+            }),
             spread_bps,
             fee_bps,
         }
     }
 
     pub fn set_price(&self, symbol: impl Into<String>, price: Decimal) {
-        self.inner.lock().unwrap().prices.insert(symbol.into(), price);
+        self.inner
+            .lock()
+            .unwrap()
+            .prices
+            .insert(symbol.into(), price);
     }
 }
 
@@ -99,7 +106,10 @@ impl Executor for PaperExecutor {
         if let Some(limit) = order.limit_price {
             let slip = ((exec_price - limit) / limit).abs();
             if slip > order.max_slippage {
-                return Err(ExecError::SlippageExceeded { got: slip, tol: order.max_slippage });
+                return Err(ExecError::SlippageExceeded {
+                    got: slip,
+                    tol: order.max_slippage,
+                });
             }
         }
 
@@ -172,7 +182,10 @@ mod tests {
     async fn paper_fills_buy_above_mid_with_fee() {
         let ex = PaperExecutor::new(dec!(0.0010), dec!(0.0005));
         ex.set_price("ROAR", dec!(100));
-        let fill = ex.execute(&order(Side::Buy, dec!(2), None, dec!(0.05))).await.unwrap();
+        let fill = ex
+            .execute(&order(Side::Buy, dec!(2), None, dec!(0.05)))
+            .await
+            .unwrap();
         assert_eq!(fill.price, dec!(100.10));
         assert_eq!(fill.fee, dec!(0.100100)); // 2 * 100.10 * 0.0005
     }
@@ -191,7 +204,10 @@ mod tests {
     #[tokio::test]
     async fn live_executor_never_fills() {
         let ex = LiveExecutor::unconfigured();
-        let err = ex.execute(&order(Side::Buy, dec!(1), None, dec!(0.05))).await.unwrap_err();
+        let err = ex
+            .execute(&order(Side::Buy, dec!(1), None, dec!(0.05)))
+            .await
+            .unwrap_err();
         assert!(matches!(err, ExecError::LiveNotConfigured));
     }
 }

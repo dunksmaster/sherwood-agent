@@ -26,8 +26,7 @@ fn usage() -> ! {
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -42,7 +41,11 @@ async fn main() -> Result<()> {
         Some("check") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
             let cfg = config::AppConfig::load(&path)?;
-            println!("ok: {} leaders, allowlist {} symbols, mode = paper", cfg.copytrade.leaders.len(), cfg.risk.allowlist.len());
+            println!(
+                "ok: {} leaders, allowlist {} symbols, mode = paper",
+                cfg.copytrade.leaders.len(),
+                cfg.risk.allowlist.len()
+            );
             Ok(())
         }
         _ => usage(),

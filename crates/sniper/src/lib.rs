@@ -110,7 +110,10 @@ impl RugScreen {
         if c.reject_if_freezable && ev.can_freeze {
             flags.push(RugFlag::Freezable);
         }
-        let tax = ev.buy_tax.unwrap_or(dec!(0)).max(ev.sell_tax.unwrap_or(dec!(0)));
+        let tax = ev
+            .buy_tax
+            .unwrap_or(dec!(0))
+            .max(ev.sell_tax.unwrap_or(dec!(0)));
         if tax > c.max_tax {
             flags.push(RugFlag::TaxTooHigh);
         }
@@ -120,7 +123,11 @@ impl RugScreen {
 
     /// Build an entry order iff the screen is clean. Returns the failing flags
     /// otherwise.
-    pub fn entry_order(&self, ev: &NewPoolEvent, ref_price: Decimal) -> Result<Order, Vec<RugFlag>> {
+    pub fn entry_order(
+        &self,
+        ev: &NewPoolEvent,
+        ref_price: Decimal,
+    ) -> Result<Order, Vec<RugFlag>> {
         let flags = self.screen(ev);
         if !flags.is_empty() {
             return Err(flags);

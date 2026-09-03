@@ -36,7 +36,15 @@ impl Portfolio {
     }
 
     pub fn position(&self, asset: &Asset) -> Decimal {
-        self.positions.get(&asset.symbol).copied().unwrap_or(dec!(0))
+        self.positions
+            .get(&asset.symbol)
+            .copied()
+            .unwrap_or(dec!(0))
+    }
+
+    /// Volume-weighted average entry cost for the current position, if any.
+    pub fn avg_cost(&self, asset: &Asset) -> Option<Decimal> {
+        self.avg_cost.get(&asset.symbol).copied()
     }
 
     /// Mark-to-market equity given a price oracle for held assets.

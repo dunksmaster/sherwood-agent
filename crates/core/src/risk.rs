@@ -3,7 +3,7 @@
 //! a misbehaving strategy (or decision model) from doing unbounded damage.
 
 use crate::portfolio::Portfolio;
-use crate::types::{Asset, Order, Side};
+use crate::types::{Order, Side};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
@@ -142,7 +142,11 @@ impl RiskGate {
                     });
                 }
                 let resulting = (portfolio.position(&order.asset) + order.qty) * price;
-                let frac = if equity > dec!(0) { resulting / equity } else { dec!(0) };
+                let frac = if equity > dec!(0) {
+                    resulting / equity
+                } else {
+                    dec!(0)
+                };
                 if frac > self.cfg.max_position_fraction {
                     return Err(RiskReject::PositionCap {
                         got: frac,
@@ -163,7 +167,7 @@ impl RiskGate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{OrderId, Venue};
+    use crate::types::{Asset, OrderId, Venue};
 
     fn order(side: Side, qty: Decimal, price: Decimal, slip: Decimal) -> Order {
         Order {
@@ -180,22 +184,36 @@ mod tests {
 
     #[test]
     fn rejects_when_kill_switch_on() {
-        let mut cfg = RiskConfig::default();
-        cfg.kill_switch = true;
-        let gate = RiskGate::new(cfg);
+        let gate = RiskGate::new(RiskConfig {
+            kill_switch: true,
+            ..Default::default()
+        });
         let p = Portfolio::new(dec!(1000));
         let err = gate
-            .check(&order(Side::Buy, dec!(1), dec!(10), dec!(0.01)), &p, None, dec!(1000))
+            .check(
+                &order(Side::Buy, dec!(1), dec!(10), dec!(0.01)),
+                &p,
+                None,
+                dec!(1000),
+            )
             .unwrap_err();
         assert_eq!(err, RiskReject::KillSwitch);
     }
 
     #[test]
     fn enforces_notional_cap() {
-        let gate = RiskGate::new(RiskConfig { max_order_notional: dec!(100), ..Default::default() });
+        let gate = RiskGate::new(RiskConfig {
+            max_order_notional: dec!(100),
+            ..Default::default()
+        });
         let p = Portfolio::new(dec!(10_000));
         let err = gate
-            .check(&order(Side::Buy, dec!(20), dec!(10), dec!(0.01)), &p, None, dec!(10_000))
+            .check(
+                &order(Side::Buy, dec!(20), dec!(10), dec!(0.01)),
+                &p,
+                None,
+                dec!(10_000),
+            )
             .unwrap_err();
         assert!(matches!(err, RiskReject::NotionalCap { .. }));
     }
@@ -210,17 +228,30 @@ mod tests {
         let p = Portfolio::new(dec!(1000));
         // 60 notional on 1000 equity = 6% ok; 200 = 20% rejected
         assert!(gate
-            .check(&order(Side::Buy, dec!(6), dec!(10), dec!(0.01)), &p, None, dec!(1000))
+            .check(
+                &order(Side::Buy, dec!(6), dec!(10), dec!(0.01)),
+                &p,
+                None,
+                dec!(1000)
+            )
             .is_ok());
         let err = gate
-            .check(&order(Side::Buy, dec!(20), dec!(10), dec!(0.01)), &p, None, dec!(1000))
+            .check(
+                &order(Side::Buy, dec!(20), dec!(10), dec!(0.01)),
+                &p,
+                None,
+                dec!(1000),
+            )
             .unwrap_err();
         assert!(matches!(err, RiskReject::PositionCap { .. }));
     }
 
     #[test]
     fn blocks_after_daily_loss_limit() {
-        let gate = RiskGate::new(RiskConfig { max_daily_loss: dec!(50), ..Default::default() });
+        let gate = RiskGate::new(RiskConfig {
+            max_daily_loss: dec!(50),
+            ..Default::default()
+        });
         let mut p = Portfolio::new(dec!(1000));
         // force realized pnl to -60
         use crate::types::Fill;
@@ -246,7 +277,12 @@ mod tests {
             at: Utc::now(),
         });
         let err = gate
-            .check(&order(Side::Buy, dec!(1), dec!(10), dec!(0.01)), &p, None, dec!(940))
+            .check(
+                &order(Side::Buy, dec!(1), dec!(10), dec!(0.01)),
+                &p,
+                None,
+                dec!(940),
+            )
             .unwrap_err();
         assert!(matches!(err, RiskReject::DailyLoss { .. }));
     }
