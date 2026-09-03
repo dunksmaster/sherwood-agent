@@ -11,12 +11,13 @@
 //!   operator: you implement the adapter, you accept the agreements, you hold
 //!   the keys. See `docs/LIVE_EXECUTION.md`.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 use async_trait::async_trait;
 use chrono::Utc;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sherwood_core::{Fill, Order, Side, Venue};
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ExecError {
@@ -74,11 +75,14 @@ impl PaperExecutor {
     }
 
     pub fn set_price(&self, symbol: impl Into<String>, price: Decimal) {
-        self.inner
-            .lock()
-            .unwrap()
-            .prices
-            .insert(symbol.into(), price);
+        self.state().prices.insert(symbol.into(), price);
+    }
+
+    /// Lock the inner state, recovering from a poisoned mutex rather than
+    /// panicking. Poisoning here only means a prior caller panicked mid-fill;
+    /// the simulated ledger is still coherent enough to keep serving.
+    fn state(&self) -> MutexGuard<'_, PaperState> {
+        self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 }
 
@@ -92,7 +96,7 @@ impl Default for PaperExecutor {
 #[async_trait]
 impl Executor for PaperExecutor {
     async fn execute(&self, order: &Order) -> Result<Fill, ExecError> {
-        let mut st = self.inner.lock().unwrap();
+        let mut st = self.state();
         let mid = *st
             .prices
             .get(&order.asset.symbol)

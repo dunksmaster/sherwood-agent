@@ -21,10 +21,25 @@ thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 toml = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time", "signal"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rust_decimal = { version = "1", features = ["serde"] }
 rust_decimal_macros = "1"
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
+
+# Enforced in every crate via `[lints] workspace = true`.
+# See docs/ENGINEERING-STANDARDS.md. `missing_docs` and `clippy::pedantic` are
+# adopted per crate as documentation catches up, so they do not hard-fail CI
+# (which runs `clippy -D warnings`) on a partially-documented codebase.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
