@@ -51,16 +51,26 @@ Each phase gates the next. **No code is written until S0 is complete and reviewe
 
 ## Pre-S0 — repo bootstrap
 
-| Step | Task |
-|---|---|
-| P0.1 | Decide repository visibility (see [SECURITY.md](SECURITY.md#disclosure-posture)) |
-| P0.2 | Branch protection on `main`: require PR, green CI, no direct push |
-| P0.3 | Issue templates — bug, feature, security |
-| P0.4 | PR template with the review checklist |
-| P0.5 | `CODEOWNERS` |
-| P0.6 | `.deny.toml` — allow MIT/Apache-2.0/BSD/ISC/Zlib, ban GPL/AGPL/LGPL/ELv2, check advisories |
-| P0.7 | Renovate or Dependabot configuration |
-| P0.8 | Pre-commit hooks: `gitleaks`, `cargo fmt`, `cargo clippy` |
+Also the hygiene half of the [grade target](GRADE-TARGET.md) — these lift the process
+dimensions of the rubric without any architecture work. The `H` labels are cross-referenced
+from `GRADE-TARGET.md`.
+
+| Step | Task | Grade item |
+|---|---|---|
+| P0.1 | Decide repository visibility (see [SECURITY.md](SECURITY.md#disclosure-posture)) | — |
+| P0.2 | Branch protection on `main`: require PR, green CI, no direct push | H4 |
+| P0.3 | Issue templates — bug, feature, security | — |
+| P0.4 | PR template with the review checklist | H4 |
+| P0.5 | `CODEOWNERS` | H4 |
+| P0.6 | `.deny.toml` — allow MIT/Apache-2.0/BSD/ISC/Zlib, ban GPL/AGPL/LGPL/ELv2, check advisories | H3 |
+| P0.7 | Renovate or Dependabot configuration | H2 |
+| P0.8 | Pre-commit hooks: `gitleaks`, `cargo fmt`, `cargo clippy` | H3 |
+| P0.9 | Remove `Cargo.lock` from `.gitignore` and commit it | H1 |
+| P0.10 | `#![forbid(unsafe_code)]` + `[workspace.lints]` in the root `Cargo.toml` | H5 |
+| P0.11 | `CHANGELOG.md` and tag `v0.0.1` | H6 |
+| P0.12 | `cargo-llvm-cov` coverage reported in CI | H7 |
+| P0.13 | `CLAUDE.md` for the repo | H8 |
+| P0.14 | Config validation (defect 10) and graceful shutdown (defect 9) — small, real code | H9 |
 
 ## S0 — governance
 

@@ -33,6 +33,13 @@ Decisions that shaped the project but do not each warrant a full ADR. Newest fir
 
 ### 2026-09-03
 
+**Grade target: B (70+).** The repository is presented for licensing against a published
+rubric; B licenses reliably. The gap is mostly code substance and process, not docs — the
+grader reads code and flags padding. Mapped dimension-by-dimension to roadmap steps in
+[GRADE-TARGET.md](GRADE-TARGET.md); the cheap hygiene items (H1–H9) are folded into Pre-S0.
+*Why recorded:* so future work is weighed against a concrete bar, and so it is explicit that
+no shortcut substitutes for building S1–S5.
+
 **Scope: v0.1 is Robinhood-only.** No Solana, no wallets, no private keys. Solana becomes
 v0.2, additive, in the same repository behind the same traits.
 *Why:* the operator wants automated trading working sooner; removing key custody removes the
