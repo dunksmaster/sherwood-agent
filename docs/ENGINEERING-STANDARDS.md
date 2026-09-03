@@ -144,7 +144,7 @@ Every one of these must pass before merge:
 | 2 | `cargo clippy --all-targets --all-features -- -D warnings` |
 | 3 | `cargo test --workspace --all-features` |
 | 4 | `cargo deny check` — licences, advisories, bans, sources |
-| 5 | `cargo audit` |
+| 5 | *(RustSec advisories — covered by `cargo deny check` above, not a separate step)* |
 | 6 | `cargo cyclonedx` — SBOM artifact |
 | 7 | `gitleaks detect` — secret scan |
 | 8 | MSRV build |

@@ -21,9 +21,10 @@ and was verified against the source.
 | `sherwood-sniper` | `NewPoolEvent`, `RugScreen` with 7 safety checks, entry-order builder. 4 unit tests. | No pool event source. **Not wired into the runner.** Deferred to v0.2 |
 | `sherwood-cli` | `demo` / `run` / `check` commands; TOML config parsing **with full validation** (range + overlap checks, 6 tests); paper-only mode guard; Ctrl-C stops a run cleanly | Hardcoded single asset; synthetic price series; copy-trade and sniper config fields still not wired to behaviour |
 
-32 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
-`cargo deny check`, and `cargo audit` are all clean. CI runs those plus an MSRV build, a
-CycloneDX SBOM, `gitleaks`, a coverage report, and a doc-link check.
+32 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
+`cargo deny check` (licences + RustSec advisories + bans + sources) are all clean. CI runs
+those plus an MSRV 1.80 build, a CycloneDX SBOM, `gitleaks`, a coverage report, and a
+doc-link check.
 
 ## What is good — keep
 

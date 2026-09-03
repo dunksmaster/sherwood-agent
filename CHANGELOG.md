@@ -11,8 +11,8 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ### Added
 - Pre-S0 repository hygiene: committed `Cargo.lock`, `deny.toml`, Renovate config,
   workspace lint manifest, `CODEOWNERS`, PR and issue templates, `CLAUDE.md`.
-- CI expanded: MSRV check, `cargo-deny`, `cargo-audit`, CycloneDX SBOM, `gitleaks`,
-  coverage report, and a doc-link check.
+- CI expanded: MSRV 1.80 build, `cargo-deny` (licences + RustSec advisories + bans +
+  sources), CycloneDX SBOM, `gitleaks`, a coverage report, and a doc-link check.
 
 ### Changed
 - `PaperExecutor` recovers from a poisoned mutex instead of unwrapping.

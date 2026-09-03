@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
@@ -45,20 +48,18 @@ jobs:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
-      - name: Coverage summary
-        run: cargo llvm-cov --workspace --all-features --summary-only
+      - run: cargo llvm-cov --workspace --all-features --summary-only
 
+  # cargo-deny covers licences, security advisories (RustSec), banned crates,
+  # and unknown sources — no separate cargo-audit step is needed.
   supply-chain:
-    name: cargo-deny · cargo-audit
+    name: cargo-deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
   sbom:
     name: SBOM
@@ -67,10 +68,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Generate CycloneDX SBOM
-        run: |
-          cargo install cargo-cyclonedx --locked
-          cargo cyclonedx --all --format json
+      - uses: taiki-e/install-action@cargo-cyclonedx
+      - run: cargo cyclonedx --all --format json
       - uses: actions/upload-artifact@v4
         with:
           name: sbom
@@ -84,9 +83,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run gitleaks
+        run: |
+          VER=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1
 
   docs:
     name: doc-link check
