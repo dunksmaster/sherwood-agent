@@ -1,0 +1,11 @@
+# Every change is reviewed by the repository owner.
+* @dunksmaster
+
+# Safety-critical areas — flagged here so a future reviewer knows the bar is higher.
+/crates/core/src/risk.rs      @dunksmaster
+/crates/execution/            @dunksmaster
+/docs/SECURITY.md             @dunksmaster
+/docs/THREAT-MODEL.md         @dunksmaster
+/docs/AI-SAFETY.md            @dunksmaster
+/docs/adr/                    @dunksmaster
+/.github/                     @dunksmaster

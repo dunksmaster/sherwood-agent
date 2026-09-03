@@ -3,6 +3,7 @@ name = "sherwood-decision"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 sherwood-core = { path = "../core" }
@@ -16,3 +17,6 @@ tracing.workspace = true
 [dev-dependencies]
 tokio.workspace = true
 chrono.workspace = true
+
+[lints]
+workspace = true

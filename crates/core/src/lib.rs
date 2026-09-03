@@ -4,6 +4,7 @@
 //! of the system speaks: assets, orders, fills, portfolio state, and the risk
 //! gate that every order must pass before an executor is allowed to see it.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 pub mod portfolio;
 pub mod risk;
 pub mod types;

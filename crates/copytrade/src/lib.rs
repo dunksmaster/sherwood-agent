@@ -6,6 +6,7 @@
 //! yields [`ObservedTrade`]s. This crate only handles the translation +
 //! sizing + filtering, which is where the bugs and the risk live.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;

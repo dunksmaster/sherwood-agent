@@ -14,9 +14,9 @@ one rather than editing it.
 
 | ADR | Title | Status | Supersedes |
 |---|---|---|---|
-| [0001](adr/0001-mcp-interaction-model.md) | MCP interaction model | **proposed** | — |
-| [0002](adr/0002-ai-decision-mode.md) | AI decision mode | **proposed** | — |
-| [0003](adr/0003-storage-backend.md) | Storage backend | **proposed** | — |
+| [0001](adr/0001-mcp-interaction-model.md) | MCP interaction model | accepted 2026-09-03 | — |
+| [0002](adr/0002-ai-decision-mode.md) | AI decision mode | accepted 2026-09-03 | — |
+| [0003](adr/0003-storage-backend.md) | Storage backend | accepted 2026-09-03 | — |
 
 Planned, to be written when the step that needs them arrives:
 
@@ -32,6 +32,15 @@ Planned, to be written when the step that needs them arrives:
 Decisions that shaped the project but do not each warrant a full ADR. Newest first.
 
 ### 2026-09-03
+
+**ADR-0001, 0002, 0003 accepted.** MCP model: agent harness with an in-line fail-closed risk
+gate (Option 3). AI mode: advisory for v0.1. Storage: SQLite via `sqlx`. S0's blocking
+decision is closed; Phase 3 is unblocked in principle, pending the S7 research items listed
+in ADR-0001.
+
+**Repository visibility: private.** Standing question Q7 resolved. The architecture and threat
+model of a system that trades a real account should not be public until v0.1 is hardened;
+opening it later is always possible. Recorded in [SECURITY.md](SECURITY.md#disclosure-posture).
 
 **Grade target: B (70+).** The repository is presented for licensing against a published
 rubric; B licenses reliably. The gap is mostly code substance and process, not docs — the
@@ -88,5 +97,5 @@ Not blocking the current step, but they need answers before the step named.
 | Q4 | NVIDIA NIM model choice | S4 | Undecided |
 | Q5 | Daily AI spend ceiling | S4 | Undecided |
 | Q6 | Historical data source for backtest | S14 | Undecided |
-| Q7 | Repository visibility | Pre-S0 | Public, private recommended |
+| Q7 | ~~Repository visibility~~ | Pre-S0 | **Resolved: private** (2026-09-03) |
 | Q8 | `hoodmap` planning pass — now or later? | — | Parked |

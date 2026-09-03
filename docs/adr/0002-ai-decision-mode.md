@@ -1,11 +1,18 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-03
+accepted: 2026-09-03
 deciders: repository owner
 owner-step: S0
 ---
 
 # ADR-0002 — AI decision mode
+
+> **Accepted 2026-09-03: Mode A (advisory) for v0.1.** Mode B (direct) remains available
+> behind a config flag that the validator refuses in live mode until a paper baseline exists.
+> Under [ADR-0001](0001-mcp-interaction-model.md) Option 3 this governs only the supplementary
+> `sherwood-decision` path in v0.1; it becomes the primary path if a self-owned decision
+> engine is added later.
 
 ## Context
 

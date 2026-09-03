@@ -33,9 +33,9 @@ recorded rather than forgotten.
 
 | ADR | Status | Decision |
 |---|---|---|
-| [0001](adr/0001-mcp-interaction-model.md) | **proposed** | How sherwood talks to the Robinhood MCP |
-| [0002](adr/0002-ai-decision-mode.md) | **proposed** | AI advisory vs. AI on the decision path |
-| [0003](adr/0003-storage-backend.md) | proposed | SQLite + sqlx for v0.1 persistence |
+| [0001](adr/0001-mcp-interaction-model.md) | accepted | Agent harness with an in-line fail-closed risk gate (Option 3) |
+| [0002](adr/0002-ai-decision-mode.md) | accepted | Advisory mode for v0.1; direct mode flag-gated, not live until baselined |
+| [0003](adr/0003-storage-backend.md) | accepted | SQLite via `sqlx`, behind a `Store` trait |
 
 ## Standards, security, safety
 

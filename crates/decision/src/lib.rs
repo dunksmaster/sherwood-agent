@@ -14,6 +14,7 @@
 //! runner turns a [`Decision`] into an [`Order`] and the risk gate has the
 //! final say.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;

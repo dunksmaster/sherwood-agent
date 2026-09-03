@@ -1,6 +1,6 @@
 /target
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock is committed — this is a workspace with a binary.
 
 # secrets / local config
 config.toml
