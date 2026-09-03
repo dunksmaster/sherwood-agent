@@ -6,17 +6,24 @@
 //!
 //! The risk gate is unconditional. A decision that the gate rejects is logged
 //! and dropped.
+//!
+//! When a [`SqliteStore`] is supplied, the run resumes from the last portfolio
+//! snapshot, records every fill and gate rejection to the tamper-evident audit
+//! log, and writes a fresh snapshot on exit — including on a clean interrupt.
 
 use crate::config::AppConfig;
 use anyhow::Result;
 use chrono::Utc;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use serde_json::json;
 use sherwood_core::{
     Asset, Decision, MarketSnapshot, Order, OrderId, Portfolio, RiskGate, Side, Venue,
 };
 use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
 use sherwood_execution::{Executor, PaperExecutor};
+use sherwood_store::{SqliteStore, Store};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A tiny synthetic price path so `demo` and `run` do something visible without
@@ -35,19 +42,59 @@ fn synthetic_series(base: Decimal) -> Vec<Decimal> {
     steps.iter().map(|d| base * (dec!(1) + *d)).collect()
 }
 
-async fn run_loop(
-    label: &str,
+fn side_str(s: Side) -> &'static str {
+    match s {
+        Side::Buy => "buy",
+        Side::Sell => "sell",
+    }
+}
+
+/// Append an audit event if a store is present; a no-op otherwise.
+async fn audit(store: Option<&SqliteStore>, kind: &str, data: serde_json::Value) -> Result<()> {
+    if let Some(s) = store {
+        s.append_audit(kind, data).await?;
+    }
+    Ok(())
+}
+
+/// Everything a paper run needs except the decider (which stays a separate
+/// argument so it can be a trait object).
+struct Run<'a> {
+    label: &'a str,
     asset: Asset,
     prices: Vec<Decimal>,
     starting_cash: Decimal,
     gate: RiskGate,
-    decider: impl Decider,
-    shutdown: &AtomicBool,
-) -> Result<()> {
+    shutdown: &'a AtomicBool,
+    store: Option<&'a SqliteStore>,
+}
+
+async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
+    let Run {
+        label,
+        asset,
+        prices,
+        starting_cash,
+        gate,
+        shutdown,
+        store,
+    } = cfg;
+
     let Some(&first) = prices.first() else {
         anyhow::bail!("price series is empty");
     };
-    let mut portfolio = Portfolio::new(starting_cash);
+
+    let mut portfolio = match store {
+        Some(s) => match s.load_portfolio().await? {
+            Some(p) => {
+                tracing::info!(cash = %p.cash(), "resumed from snapshot");
+                p
+            }
+            None => Portfolio::new(starting_cash),
+        },
+        None => Portfolio::new(starting_cash),
+    };
+
     let exec = PaperExecutor::default();
     let mut prev = first;
     let mut interrupted = false;
@@ -96,10 +143,48 @@ async fn run_loop(
                             side = ?fill.side, qty = %fill.qty, price = %fill.price,
                             cash = %portfolio.cash(), "filled"
                         );
+                        if let Some(s) = store {
+                            s.append_fill(&fill).await?;
+                        }
+                        audit(
+                            store,
+                            "fill",
+                            json!({
+                                "tick": i,
+                                "order_id": fill.order_id.0,
+                                "symbol": fill.asset.symbol,
+                                "side": side_str(fill.side),
+                                "qty": fill.qty.to_string(),
+                                "price": fill.price.to_string(),
+                                "fee": fill.fee.to_string(),
+                            }),
+                        )
+                        .await?;
                     }
-                    Err(e) => tracing::warn!("exec rejected: {e}"),
+                    Err(e) => {
+                        tracing::warn!("exec rejected: {e}");
+                        audit(
+                            store,
+                            "exec_reject",
+                            json!({ "tick": i, "reason": e.to_string() }),
+                        )
+                        .await?;
+                    }
                 },
-                Err(e) => tracing::warn!("risk gate blocked order: {e}"),
+                Err(e) => {
+                    tracing::warn!("risk gate blocked order: {e}");
+                    audit(
+                        store,
+                        "gate_reject",
+                        json!({
+                            "tick": i,
+                            "symbol": order.asset.symbol,
+                            "side": side_str(order.side),
+                            "reason": e.to_string(),
+                        }),
+                    )
+                    .await?;
+                }
             }
         }
         prev = *px;
@@ -110,6 +195,21 @@ async fn run_loop(
     let last = prev;
     let equity = portfolio.equity(|s| (s == asset.symbol).then_some(last));
     let state = if interrupted { "interrupted" } else { "done" };
+
+    if let Some(s) = store {
+        s.save_portfolio(&portfolio).await?;
+    }
+    audit(
+        store,
+        "run_end",
+        json!({
+            "state": state,
+            "cash": portfolio.cash().to_string(),
+            "realized_pnl": portfolio.realized_pnl().to_string(),
+        }),
+    )
+    .await?;
+
     println!(
         "[{label}] {state}. cash={} position={} equity={} realized_pnl={}",
         portfolio.cash(),
@@ -172,36 +272,53 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
         ..Default::default()
     });
     run_loop(
-        "demo",
-        asset,
-        synthetic_series(dec!(100)),
-        dec!(1_000),
-        gate,
-        RuleDecider::new(RuleConfig::default()),
-        shutdown,
+        Run {
+            label: "demo",
+            asset,
+            prices: synthetic_series(dec!(100)),
+            starting_cash: dec!(1_000),
+            gate,
+            shutdown,
+            store: None,
+        },
+        &RuleDecider::new(RuleConfig::default()),
     )
     .await
 }
 
 pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     tracing::info!(
-        "paper run: starting_cash={} leaders={} sniper_enabled={}",
+        "paper run: starting_cash={} leaders={} sniper_enabled={} state_path={:?}",
         cfg.general.starting_cash,
         cfg.copytrade.leaders.len(),
-        cfg.sniper.enabled
+        cfg.sniper.enabled,
+        cfg.general.state_path,
     );
     let asset = Asset::symbol("ROAR");
     let gate = RiskGate::new(cfg.risk.to_core());
+
+    let store = match &cfg.general.state_path {
+        Some(path) => Some(open_store(path).await?),
+        None => None,
+    };
+
     run_loop(
-        "run",
-        asset,
-        synthetic_series(dec!(100)),
-        cfg.general.starting_cash,
-        gate,
-        RuleDecider::new(RuleConfig::default()),
-        shutdown,
+        Run {
+            label: "run",
+            asset,
+            prices: synthetic_series(dec!(100)),
+            starting_cash: cfg.general.starting_cash,
+            gate,
+            shutdown,
+            store: store.as_ref(),
+        },
+        &RuleDecider::new(RuleConfig::default()),
     )
     .await
+}
+
+async fn open_store(path: &Path) -> Result<SqliteStore> {
+    Ok(SqliteStore::open(path).await?)
 }
 
 #[cfg(test)]
@@ -211,7 +328,6 @@ mod tests {
     #[tokio::test]
     async fn stops_early_when_shutdown_is_set() {
         let flag = AtomicBool::new(true); // already requested
-                                          // Should return Ok without processing the series.
         demo(&flag).await.unwrap();
     }
 
@@ -219,5 +335,47 @@ mod tests {
     async fn completes_a_full_run_when_not_interrupted() {
         let flag = AtomicBool::new(false);
         demo(&flag).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_persists_state_and_audits_the_chain() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+
+        let cfg = AppConfig {
+            general: crate::config::General {
+                starting_cash: dec!(1000),
+                mode: "paper".into(),
+                state_path: Some(db.clone()),
+            },
+            risk: crate::config::RiskSection {
+                max_order_notional: dec!(10_000),
+                max_position_fraction: dec!(0.5),
+                ..crate::config::RiskSection::default()
+            },
+            copytrade: Default::default(),
+            sniper: Default::default(),
+        };
+
+        let flag = AtomicBool::new(false);
+        run(cfg, &flag).await.unwrap();
+
+        // Re-open independently and confirm the run left durable, verifiable state.
+        let s = SqliteStore::open(&db).await.unwrap();
+        let p = s.load_portfolio().await.unwrap().expect("a snapshot");
+        assert!(
+            p.realized_pnl() != dec!(0),
+            "the demo series closes a position"
+        );
+        assert!(!s.fills().await.unwrap().is_empty(), "fills were recorded");
+        assert!(
+            matches!(
+                s.verify_audit_chain().await.unwrap(),
+                sherwood_store::AuditVerification::Ok { .. }
+            ),
+            "audit chain verifies"
+        );
+        let tail = s.audit_tail(1).await.unwrap();
+        assert_eq!(tail[0].kind, "run_end");
     }
 }

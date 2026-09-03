@@ -81,17 +81,19 @@ Full detail, including the event bus and error taxonomy, is in
 sherwood-agent/
 ├── crates/
 │   ├── core/         domain types, Portfolio, RiskGate  (no I/O)
+│   ├── store/        SQLite persistence + hash-chained audit log (sqlx)
 │   ├── execution/    Executor trait, PaperExecutor, LiveExecutor stub
 │   ├── decision/     Decider trait, RuleDecider, AiDecider
 │   ├── copytrade/    library scaffold — deferred to v0.2
 │   ├── sniper/       library scaffold — deferred to v0.2
 │   └── cli/          the `sherwood` binary
+├── .sqlx/            committed sqlx offline query cache (CI uses this)
 ├── docs/             the plan, standards, security, ADRs — start at docs/README.md
 ├── config.example.toml
 └── rust-toolchain.toml
 ```
 
-Planned crates (not yet written): `store`, `config`, `events`, `supervisor`, `secrets`,
+Planned crates (not yet written): `config`, `events`, `supervisor`, `secrets`,
 `runtime`, `server`, plus a `frontend/`. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Prerequisites

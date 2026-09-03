@@ -6,7 +6,7 @@ use rust_decimal_macros::dec;
 use serde::Deserialize;
 use sherwood_core::RiskConfig;
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Require `value` to lie in `(low, high]`. `name` is used in the error.
 fn require_in_half_open(name: &str, value: Decimal, low: Decimal, high: Decimal) -> Result<()> {
@@ -51,6 +51,11 @@ pub struct General {
     /// Only "paper" is accepted. Any other value is a hard error — the runner
     /// has no live adapter to hand it to.
     pub mode: String,
+    /// If set, `sherwood run` persists to a SQLite database here: the portfolio
+    /// snapshot, the fill history, and the tamper-evident audit log. A relative
+    /// path is resolved against the working directory. Absent = no persistence.
+    #[serde(default)]
+    pub state_path: Option<PathBuf>,
 }
 
 impl Default for General {
@@ -58,6 +63,7 @@ impl Default for General {
         Self {
             starting_cash: Decimal::from(1_000),
             mode: "paper".into(),
+            state_path: None,
         }
     }
 }
