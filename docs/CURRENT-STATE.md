@@ -19,9 +19,12 @@ and was verified against the source.
 | `sherwood-decision` | `Decider` trait, `RuleDecider` (momentum entry, take-profit, stop-loss, liquidity floor), `AiDecider` wrapping a caller-supplied async closure. 5 unit tests. | No provider client, no prompt, no output schema — **by design**, the closure is the seam |
 | `sherwood-copytrade` | `TradeFeed` trait, `ObservedTrade`, `CopyTrader` with three sizing modes and sell clamping. 5 unit tests. | No live `TradeFeed` impl. **Not wired into the runner.** Deferred to v0.2 |
 | `sherwood-sniper` | `NewPoolEvent`, `RugScreen` with 7 safety checks, entry-order builder. 4 unit tests. | No pool event source. **Not wired into the runner.** Deferred to v0.2 |
-| `sherwood-cli` | `demo` / `run` / `check` commands, TOML config parsing, paper-only mode guard | Hardcoded single asset; synthetic price series; most config fields parsed but unused |
+| `sherwood-cli` | `demo` / `run` / `check` commands; TOML config parsing **with full validation** (range + overlap checks, 6 tests); paper-only mode guard; Ctrl-C stops a run cleanly | Hardcoded single asset; synthetic price series; copy-trade and sniper config fields still not wired to behaviour |
 
-23 tests pass. `cargo fmt --check` and `cargo clippy -- -D warnings` are clean. CI is green.
+32 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
+`cargo deny check` (licences + RustSec advisories + bans + sources) are all clean. CI runs
+those plus an MSRV 1.80 build, a CycloneDX SBOM, `gitleaks`, a coverage report, and a
+doc-link check.
 
 ## What is good — keep
 
@@ -46,15 +49,19 @@ Severity is relative to shipping v0.1.
 | 6 | No event bus | **Blocker** | Components call each other directly. No decoupling, no audit subscriber, no metrics subscriber. |
 | 7 | No audit log | High | Nothing is persisted. The plan calls for a hash-chained log; none exists. |
 | 8 | `RiskGate` ignores unrealized P&L | High | Only `realized_pnl` feeds the daily-loss breaker. An open position can bleed arbitrarily while the gate still admits new entries. |
-| 9 | No graceful shutdown | High | SIGINT exits immediately with no state flush. |
-| 10 | Weak config validation | High | `max_position_fraction` can be negative or greater than 1; no range or overlap checks. |
+| 9 | ~~No graceful shutdown~~ | ~~High~~ | **Fixed (Pre-S0):** a Ctrl-C handler sets a flag; `run_loop` stops cleanly at the next tick and still prints the ledger. Full state *flush* waits on persistence (item 1). |
+| 10 | ~~Weak config validation~~ | ~~High~~ | **Fixed (Pre-S0):** `AppConfig::validate` runs on every load — range checks on every numeric field, allow/deny overlap check, actionable errors. Six tests. |
 | 11 | No retry or circuit breaker | High | `PaperExecutor` can fail; there is no policy for what happens next. |
 | 12 | No cooldown or max-open-positions | Medium | Nothing prevents overtrading a single symbol or opening unbounded concurrent positions. |
 | 13 | Order lifecycle is synchronous | Medium | `Executor::execute` returns a `Fill` immediately. A real venue returns an order id whose status must be polled. |
-| 14 | `--` no shutdown flush of the ledger | Medium | Follows from 1 and 9. |
+| 14 | No shutdown flush of the ledger | Medium | The interrupt now stops cleanly (item 9), but there is still nowhere to flush to (item 1). |
 
 Items 1–6 are addressed by S1–S5 of the [roadmap](ROADMAP.md). Items 8 and 12 are addressed
-by the `RiskGate` extension in S5. Items 9–11, 13 are addressed in S5 and S7.
+by the `RiskGate` extension in S5. Items 11 and 13 are addressed in S5 and S7. Items 9 and 10
+were closed in the Pre-S0 hygiene pass.
+
+Also fixed in Pre-S0: `PaperExecutor` recovers from a poisoned mutex instead of unwrapping,
+and `run_loop` guards an empty price series instead of indexing.
 
 ## Environment notes
 

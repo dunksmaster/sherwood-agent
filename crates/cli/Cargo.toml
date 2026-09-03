@@ -3,6 +3,7 @@ name = "sherwood-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [[bin]]
 name = "sherwood"
@@ -23,3 +24,6 @@ toml.workspace = true
 rust_decimal.workspace = true
 rust_decimal_macros.workspace = true
 chrono.workspace = true
+
+[lints]
+workspace = true

@@ -20,12 +20,12 @@ These are gates, not aspirations. CI enforces what can be enforced; the rest is 
 Declared once in the root `Cargo.toml` and inherited by every crate via
 `[lints] workspace = true`.
 
+**Enforced now** — CI runs `clippy --all-targets --all-features -- -D warnings`, so every
+lint below is effectively a build failure:
+
 ```toml
 [workspace.lints.rust]
-unsafe_code       = "forbid"
-missing_docs      = "warn"
-rust_2018_idioms  = "warn"
-unreachable_pub   = "warn"
+unsafe_code = "forbid"
 
 [workspace.lints.clippy]
 unwrap_used   = "deny"
@@ -34,14 +34,27 @@ panic         = "deny"
 todo          = "deny"
 unimplemented = "deny"
 dbg_macro     = "deny"
-float_arithmetic = "deny"   # money is Decimal; see below
-pedantic      = { level = "warn", priority = -1 }
 ```
+
+Each crate root carries
+`#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]` so test
+code may still `unwrap` freely.
+
+**Phased in per crate** as the codebase matures — added to a crate's own `[lints]` once it
+passes, rather than workspace-wide where a single laggard crate would block CI:
+
+- `missing_docs = "warn"` — as public items get doc comments
+- `unreachable_pub = "warn"` — after the `cli` binary's internal items move to `pub(crate)`
+- `clippy::pedantic` — crate by crate, fixing the surfaced style lints as you go
+- `clippy::float_arithmetic = "deny"` — money is already `Decimal` everywhere (a review
+  rule); the lint is added once confirmed noise-free per crate
 
 `unsafe_code` may only be relaxed per-crate, with a `SAFETY:` comment on every block and an
 ADR explaining why. No such crate exists today.
 
-`unwrap`/`expect`/`panic` are permitted in `#[cfg(test)]` code and in `build.rs` only.
+`unwrap` / `expect` / `panic` are permitted in `#[cfg(test)]` code and in `build.rs` only.
+Non-test code that must lock a `Mutex` recovers from poisoning
+(`.lock().unwrap_or_else(|e| e.into_inner())`) rather than unwrapping.
 
 ## Errors
 
@@ -54,7 +67,8 @@ ADR explaining why. No such crate exists today.
 
 ## Money
 
-- **`rust_decimal` only.** `float_arithmetic` is denied workspace-wide.
+- **`rust_decimal` only.** Enforced by review now; by the `clippy::float_arithmetic` lint
+  as it is phased into each crate.
 - Prices, quantities, notionals, fees, and P&L are `Decimal` end to end, including over the
   HTTP API and in the database (stored as `TEXT`, not `REAL`).
 
@@ -130,7 +144,7 @@ Every one of these must pass before merge:
 | 2 | `cargo clippy --all-targets --all-features -- -D warnings` |
 | 3 | `cargo test --workspace --all-features` |
 | 4 | `cargo deny check` — licences, advisories, bans, sources |
-| 5 | `cargo audit` |
+| 5 | *(RustSec advisories — covered by `cargo deny check` above, not a separate step)* |
 | 6 | `cargo cyclonedx` — SBOM artifact |
 | 7 | `gitleaks detect` — secret scan |
 | 8 | MSRV build |

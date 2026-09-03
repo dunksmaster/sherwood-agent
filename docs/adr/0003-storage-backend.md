@@ -1,11 +1,15 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-03
+accepted: 2026-09-03
 deciders: repository owner
 owner-step: S0
 ---
 
 # ADR-0003 — Storage backend
+
+> **Accepted 2026-09-03: SQLite via `sqlx`, behind a `Store` trait.** The offline query
+> cache (`.sqlx/`) is committed so CI needs no live database.
 
 ## Context
 

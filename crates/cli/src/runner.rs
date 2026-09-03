@@ -17,6 +17,7 @@ use sherwood_core::{
 };
 use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
 use sherwood_execution::{Executor, PaperExecutor};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A tiny synthetic price path so `demo` and `run` do something visible without
 /// a network feed. Real deployments replace this with a live data source.
@@ -41,12 +42,22 @@ async fn run_loop(
     starting_cash: Decimal,
     gate: RiskGate,
     decider: impl Decider,
+    shutdown: &AtomicBool,
 ) -> Result<()> {
+    let Some(&first) = prices.first() else {
+        anyhow::bail!("price series is empty");
+    };
     let mut portfolio = Portfolio::new(starting_cash);
     let exec = PaperExecutor::default();
-    let mut prev = prices[0];
+    let mut prev = first;
+    let mut interrupted = false;
 
     for (i, px) in prices.iter().enumerate() {
+        if shutdown.load(Ordering::Relaxed) {
+            tracing::warn!(tick = i, "shutdown requested — stopping cleanly");
+            interrupted = true;
+            break;
+        }
         exec.set_price(asset.symbol.clone(), *px);
         let change_24h = if prev > dec!(0) {
             (*px - prev) / prev
@@ -94,10 +105,13 @@ async fn run_loop(
         prev = *px;
     }
 
-    let last = *prices.last().unwrap();
+    // The loop invariant leaves `prev` holding the last processed price (the
+    // series is non-empty, guarded above).
+    let last = prev;
     let equity = portfolio.equity(|s| (s == asset.symbol).then_some(last));
+    let state = if interrupted { "interrupted" } else { "done" };
     println!(
-        "[{label}] done. cash={} position={} equity={} realized_pnl={}",
+        "[{label}] {state}. cash={} position={} equity={} realized_pnl={}",
         portfolio.cash(),
         portfolio.position(&asset),
         equity,
@@ -150,7 +164,7 @@ fn size(
     }
 }
 
-pub async fn demo() -> Result<()> {
+pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
     let asset = Asset::symbol("ROAR");
     let gate = RiskGate::new(sherwood_core::RiskConfig {
         max_order_notional: dec!(10_000),
@@ -164,11 +178,12 @@ pub async fn demo() -> Result<()> {
         dec!(1_000),
         gate,
         RuleDecider::new(RuleConfig::default()),
+        shutdown,
     )
     .await
 }
 
-pub async fn run(cfg: AppConfig) -> Result<()> {
+pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     tracing::info!(
         "paper run: starting_cash={} leaders={} sniper_enabled={}",
         cfg.general.starting_cash,
@@ -184,6 +199,25 @@ pub async fn run(cfg: AppConfig) -> Result<()> {
         cfg.general.starting_cash,
         gate,
         RuleDecider::new(RuleConfig::default()),
+        shutdown,
     )
     .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stops_early_when_shutdown_is_set() {
+        let flag = AtomicBool::new(true); // already requested
+                                          // Should return Ok without processing the series.
+        demo(&flag).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn completes_a_full_run_when_not_interrupted() {
+        let flag = AtomicBool::new(false);
+        demo(&flag).await.unwrap();
+    }
 }

@@ -5,11 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  test:
+  check:
+    name: fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,4 +27,75 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
       - name: Test
-        run: cargo test --all --all-features
+        run: cargo test --workspace --all-features --locked
+
+  msrv:
+    name: MSRV 1.80
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.80.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-features --locked
+
+  coverage:
+    name: coverage (report only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --workspace --all-features --summary-only
+
+  # cargo-deny covers licences, security advisories (RustSec), banned crates,
+  # and unknown sources — no separate cargo-audit step is needed.
+  supply-chain:
+    name: cargo-deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@cargo-cyclonedx
+      - run: cargo cyclonedx --all --format json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: "**/*.cdx.json"
+          if-no-files-found: warn
+
+  secrets:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        run: |
+          VER=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VER}/gitleaks_${VER}_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+          ./gitleaks git --no-banner --redact --exit-code 1
+
+  docs:
+    name: doc-link check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/check-doc-links.py

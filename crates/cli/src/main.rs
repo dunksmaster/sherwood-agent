@@ -5,11 +5,15 @@
 //! implement `sherwood_execution::Executor` against your venue and call the
 //! runner from your own binary. See `docs/LIVE_EXECUTION.md`.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
 mod config;
 mod runner;
 
 use anyhow::Result;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 fn usage() -> ! {
     eprintln!(
@@ -22,6 +26,20 @@ fn usage() -> ! {
     std::process::exit(2);
 }
 
+/// Install a Ctrl-C handler that sets the returned flag. A second Ctrl-C is not
+/// caught, so the default handler still aborts a wedged run.
+fn install_shutdown_handler() -> Arc<AtomicBool> {
+    let flag = Arc::new(AtomicBool::new(false));
+    let handler_flag = Arc::clone(&flag);
+    tokio::spawn(async move {
+        if tokio::signal::ctrl_c().await.is_ok() {
+            tracing::warn!("Ctrl-C received — finishing the current tick, then stopping");
+            handler_flag.store(true, Ordering::Relaxed);
+        }
+    });
+    flag
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -30,13 +48,15 @@ async fn main() -> Result<()> {
         )
         .init();
 
+    let shutdown = install_shutdown_handler();
+
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
-        Some("demo") => runner::demo().await,
+        Some("demo") => runner::demo(&shutdown).await,
         Some("run") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
             let cfg = config::AppConfig::load(&path)?;
-            runner::run(cfg).await
+            runner::run(cfg, &shutdown).await
         }
         Some("check") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();

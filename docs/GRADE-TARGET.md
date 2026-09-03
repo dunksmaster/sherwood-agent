@@ -38,15 +38,15 @@ honest doc set, sitting on a thin codebase with a few hygiene gaps. The gap to B
 Cheap, no architecture, all already implied by [ROADMAP.md](ROADMAP.md#pre-s0--repo-bootstrap).
 Pulled out here because they are what lifts the process half of the rubric immediately.
 
-- [ ] **H1** — remove `Cargo.lock` from `.gitignore`, commit it
-- [ ] **H2** — `renovate.json`
-- [ ] **H3** — CI gates: `cargo-deny` (+ `.deny.toml`), `cargo-audit`, `gitleaks`
-- [ ] **H4** — branch protection on `main`, `pull_request_template.md`, `CODEOWNERS`
-- [ ] **H5** — `#![forbid(unsafe_code)]` + `[workspace.lints]` in the root `Cargo.toml`
-- [ ] **H6** — `CHANGELOG.md`, tag `v0.0.1`
-- [ ] **H7** — `cargo-llvm-cov` reported in CI
-- [ ] **H8** — `CLAUDE.md` for the repo
-- [ ] **H9** — config validation (defect 10) and graceful shutdown (defect 9) — small, real code
+- [x] **H1** — `Cargo.lock` un-ignored and committed
+- [x] **H2** — `renovate.json`
+- [x] **H3** — CI gates: `cargo-deny` (+ `deny.toml`; covers RustSec advisories), `gitleaks`, SBOM, doc-links
+- [x] **H4** — `PULL_REQUEST_TEMPLATE.md`, `CODEOWNERS`, issue templates *(branch protection is a GitHub UI setting — set manually)*
+- [x] **H5** — `[workspace.lints]` with `unsafe_code = "forbid"` and the clippy denies, inherited by every crate; `missing_docs` / `pedantic` phased in per crate
+- [x] **H6** — `CHANGELOG.md` *(tag `v0.0.1` cut after this PR merges)*
+- [x] **H7** — `cargo-llvm-cov` summary step in CI
+- [x] **H8** — `CLAUDE.md`
+- [x] **H9** — `AppConfig::validate` (defect 10, 6 tests) and clean Ctrl-C shutdown (defect 9, 2 tests)
 
 ## The honest conclusion
 

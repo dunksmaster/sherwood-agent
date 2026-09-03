@@ -1,11 +1,19 @@
 ---
-status: proposed
+status: accepted
 date: 2026-09-03
+accepted: 2026-09-03
 deciders: repository owner
 owner-step: S0
 ---
 
 # ADR-0001 — MCP interaction model
+
+> **Accepted 2026-09-03: Option 3** — agent harness with an in-line, fail-closed risk gate.
+> The three open items below become S7 research tasks, not acceptance blockers: Option 3
+> does not require a custom OAuth client, so "will Robinhood authorise one" no longer gates
+> the milestone. The exact tool names are gathered at S7 for the allowlist; the operator has
+> confirmed the agent-decides path is acceptable for v0.1, with a self-owned decision engine
+> available later as a second `Executor` mode.
 
 ## Context
 

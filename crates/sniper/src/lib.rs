@@ -7,6 +7,7 @@
 //! here is the set of cheap, local checks that stop you from buying an obvious
 //! honeypot the moment it appears.
 
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;

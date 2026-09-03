@@ -1,0 +1,28 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    "group:allNonMajor"
+  ],
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "lockFileMaintenance": { "enabled": true, "schedule": ["before 5am on monday"] },
+  "cargo": { "enabled": true },
+  "github-actions": { "enabled": true },
+  "packageRules": [
+    {
+      "description": "Security advisories merge on their own schedule",
+      "matchDatasources": ["crate"],
+      "vulnerabilityAlerts": { "labels": ["security"] }
+    },
+    {
+      "description": "Batch minor and patch Rust updates weekly",
+      "matchManagers": ["cargo"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "cargo minor/patch",
+      "schedule": ["before 5am on monday"]
+    }
+  ]
+}
