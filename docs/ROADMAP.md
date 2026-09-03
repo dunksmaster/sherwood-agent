@@ -58,7 +58,7 @@ from `GRADE-TARGET.md`.
 | Step | Task | Grade item |
 |---|---|---|
 | P0.1 | Decide repository visibility (see [SECURITY.md](SECURITY.md#disclosure-posture)) | — |
-| P0.2 | Branch protection on `main`: require PR, green CI, no direct push | H4 |
+| P0.2 | Branch protection on `main` — **blocked:** needs GitHub Pro on a private repo (classic protection and rulesets both). Owner decides: Pro, go public, or rely on process discipline + CI-on-every-PR (current state). | H4 |
 | P0.3 | Issue templates — bug, feature, security | — |
 | P0.4 | PR template with the review checklist | H4 |
 | P0.5 | `CODEOWNERS` | H4 |
