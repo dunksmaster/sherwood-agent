@@ -3,28 +3,30 @@
 //! Flow per tick:
 //!   market snapshot -> Decider -> Decision -> size into Order
 //!     -> RiskGate::check -> PaperExecutor::execute -> Portfolio::apply
+//!     -> publish events
 //!
-//! The risk gate is unconditional. A decision that the gate rejects is logged
-//! and dropped.
-//!
-//! When a [`SqliteStore`] is supplied, the run resumes from the last portfolio
-//! snapshot, records every fill and gate rejection to the tamper-evident audit
-//! log, and writes a fresh snapshot on exit — including on a clean interrupt.
+//! The risk gate is unconditional. The run loop publishes [`Event`]s onto a
+//! [`Bus`]; subscribers persist them and log them. The run loop itself never
+//! calls the store to record a fill — it publishes, and the store's subscriber
+//! writes. The portfolio *snapshot* is the exception: the loop owns that state,
+//! so it writes it directly before announcing the run has ended.
 
 use crate::config::AppConfig;
 use anyhow::Result;
 use chrono::Utc;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use serde_json::json;
 use sherwood_core::{
     Asset, Decision, MarketSnapshot, Order, OrderId, Portfolio, RiskGate, Side, Venue,
 };
 use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
+use sherwood_events::{run_subscriber, Bus, Event, TracingSubscriber};
 use sherwood_execution::{Executor, PaperExecutor};
-use sherwood_store::{SqliteStore, Store};
+use sherwood_store::{SqliteStore, Store, StoreSubscriber};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use tokio::task::JoinHandle;
 
 /// A tiny synthetic price path so `demo` and `run` do something visible without
 /// a network feed. Real deployments replace this with a live data source.
@@ -42,19 +44,12 @@ fn synthetic_series(base: Decimal) -> Vec<Decimal> {
     steps.iter().map(|d| base * (dec!(1) + *d)).collect()
 }
 
-fn side_str(s: Side) -> &'static str {
-    match s {
-        Side::Buy => "buy",
-        Side::Sell => "sell",
+fn decision_tag(d: &Decision) -> &'static str {
+    match d {
+        Decision::Buy { .. } => "buy",
+        Decision::Sell { .. } => "sell",
+        Decision::Hold { .. } => "hold",
     }
-}
-
-/// Append an audit event if a store is present; a no-op otherwise.
-async fn audit(store: Option<&SqliteStore>, kind: &str, data: serde_json::Value) -> Result<()> {
-    if let Some(s) = store {
-        s.append_audit(kind, data).await?;
-    }
-    Ok(())
 }
 
 /// Everything a paper run needs except the decider (which stays a separate
@@ -66,7 +61,7 @@ struct Run<'a> {
     starting_cash: Decimal,
     gate: RiskGate,
     shutdown: &'a AtomicBool,
-    store: Option<&'a SqliteStore>,
+    store: Option<Arc<SqliteStore>>,
 }
 
 async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
@@ -84,7 +79,22 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         anyhow::bail!("price series is empty");
     };
 
-    let mut portfolio = match store {
+    // Bus + subscribers. The tracing subscriber is always attached; the store
+    // subscriber only when there is a store. Both are `await`ed on shutdown so
+    // their writes flush before the process exits.
+    let bus = Bus::new(1000);
+    let mut subs: Vec<JoinHandle<()>> = vec![tokio::spawn(run_subscriber(
+        bus.subscribe(),
+        TracingSubscriber,
+    ))];
+    if let Some(s) = &store {
+        subs.push(tokio::spawn(run_subscriber(
+            bus.subscribe(),
+            StoreSubscriber::new(s.clone()),
+        )));
+    }
+
+    let mut portfolio = match &store {
         Some(s) => match s.load_portfolio().await? {
             Some(p) => {
                 tracing::info!(cash = %p.cash(), "resumed from snapshot");
@@ -133,6 +143,13 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
 
         let decision = decider.decide(&ctx).await;
         tracing::info!(tick = i, price = %px, ?decision, "decided");
+        if !matches!(decision, Decision::Hold { .. }) {
+            bus.publish(Event::Decided {
+                tick: i as u32,
+                price: *px,
+                decision: decision_tag(&decision).to_string(),
+            });
+        }
 
         if let Some(order) = size(&decision, &asset, pos, equity, *px) {
             match gate.check(&order, &portfolio, Some(*px), equity) {
@@ -143,47 +160,17 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
                             side = ?fill.side, qty = %fill.qty, price = %fill.price,
                             cash = %portfolio.cash(), "filled"
                         );
-                        if let Some(s) = store {
-                            s.append_fill(&fill).await?;
-                        }
-                        audit(
-                            store,
-                            "fill",
-                            json!({
-                                "tick": i,
-                                "order_id": fill.order_id.0,
-                                "symbol": fill.asset.symbol,
-                                "side": side_str(fill.side),
-                                "qty": fill.qty.to_string(),
-                                "price": fill.price.to_string(),
-                                "fee": fill.fee.to_string(),
-                            }),
-                        )
-                        .await?;
+                        bus.publish(Event::OrderFilled(fill));
                     }
-                    Err(e) => {
-                        tracing::warn!("exec rejected: {e}");
-                        audit(
-                            store,
-                            "exec_reject",
-                            json!({ "tick": i, "reason": e.to_string() }),
-                        )
-                        .await?;
-                    }
+                    Err(e) => tracing::warn!(tick = i, "executor rejected order: {e}"),
                 },
                 Err(e) => {
-                    tracing::warn!("risk gate blocked order: {e}");
-                    audit(
-                        store,
-                        "gate_reject",
-                        json!({
-                            "tick": i,
-                            "symbol": order.asset.symbol,
-                            "side": side_str(order.side),
-                            "reason": e.to_string(),
-                        }),
-                    )
-                    .await?;
+                    tracing::warn!(tick = i, "risk gate blocked order: {e}");
+                    bus.publish(Event::RiskRejected {
+                        order_id: order.id.clone(),
+                        symbol: order.asset.symbol.clone(),
+                        reason: e.to_string(),
+                    });
                 }
             }
         }
@@ -196,19 +183,21 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
     let equity = portfolio.equity(|s| (s == asset.symbol).then_some(last));
     let state = if interrupted { "interrupted" } else { "done" };
 
-    if let Some(s) = store {
+    if let Some(s) = &store {
         s.save_portfolio(&portfolio).await?;
     }
-    audit(
-        store,
-        "run_end",
-        json!({
-            "state": state,
-            "cash": portfolio.cash().to_string(),
-            "realized_pnl": portfolio.realized_pnl().to_string(),
-        }),
-    )
-    .await?;
+    bus.publish(Event::RunEnded {
+        label: label.to_string(),
+        interrupted,
+        cash: portfolio.cash(),
+        realized_pnl: portfolio.realized_pnl(),
+    });
+
+    // Close the bus and wait for subscribers to drain their backlog.
+    drop(bus);
+    for h in subs {
+        h.await?;
+    }
 
     println!(
         "[{label}] {state}. cash={} position={} equity={} realized_pnl={}",
@@ -298,7 +287,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     let gate = RiskGate::new(cfg.risk.to_core());
 
     let store = match &cfg.general.state_path {
-        Some(path) => Some(open_store(path).await?),
+        Some(path) => Some(Arc::new(open_store(path).await?)),
         None => None,
     };
 
@@ -310,7 +299,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
             starting_cash: cfg.general.starting_cash,
             gate,
             shutdown,
-            store: store.as_ref(),
+            store,
         },
         &RuleDecider::new(RuleConfig::default()),
     )
@@ -338,7 +327,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_persists_state_and_audits_the_chain() {
+    async fn run_persists_state_and_audits_the_chain_via_the_bus() {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("state.db");
 

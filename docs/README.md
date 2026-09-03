@@ -36,6 +36,7 @@ recorded rather than forgotten.
 | [0001](adr/0001-mcp-interaction-model.md) | accepted | Agent harness with an in-line fail-closed risk gate (Option 3) |
 | [0002](adr/0002-ai-decision-mode.md) | accepted | Advisory mode for v0.1; direct mode flag-gated, not live until baselined |
 | [0003](adr/0003-storage-backend.md) | accepted | SQLite via `sqlx`, behind a `Store` trait |
+| [0004](adr/0004-event-schema-versioning.md) | accepted | Every bus message carries a `version`; bump on observable change; no migration framework |
 
 ## Standards, security, safety
 
@@ -59,6 +60,7 @@ recorded rather than forgotten.
 | Document | Status | What it covers |
 |---|---|---|
 | [DATA-MODEL.md](DATA-MODEL.md) | accepted | `sherwood-store` schema, migrations, the audit hash-chain, regenerating the sqlx offline cache |
+| [RUNTIME.md](RUNTIME.md) | partial | Event bus (done, S3); supervisor / scheduler / approval state machine (pending, S3.4–3.5 / S11–S12) |
 
 ## Operations
 
@@ -70,7 +72,6 @@ recorded rather than forgotten.
 
 | Document | Filled at | Purpose |
 |---|---|---|
-| [RUNTIME.md](RUNTIME.md) | S3 | Event bus, event schema + versioning, supervisor, scheduler, approval state machine |
 | [ROBINHOOD-API.md](ROBINHOOD-API.md) | S7 | Asset classes, order types, settlement, rate limits, error codes |
 | [API.md](API.md) | S9 | HTTP API — generated from `utoipa`, not hand-written |
 | [FRONTEND-ARCH.md](FRONTEND-ARCH.md) | S10 | Dashboard state management, auth flow, reconnection |
