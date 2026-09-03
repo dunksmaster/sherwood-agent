@@ -79,9 +79,17 @@ If licence revenue is a real goal, the options are:
 | **BSL 1.1** | Source-available; commercial use needs a licence; converts to open after N years | The MariaDB / Sentry model. Source-available, not open source |
 | **Proprietary** | Not published, licensed per deal | Maximum control, no community |
 
-**No decision is made here.** Changing the licence later is straightforward *while the owner
-holds all copyright* — which is exactly why the CLA and dependency policy matter now. Revisit
-before v0.1 release; record the outcome as an ADR.
+**Direction as of 2026-09-04:** the repository is **public and MIT**, developed as an
+open-source project (Q7 in [DECISIONS.md](DECISIONS.md)). This leans firmly toward the "MIT,
+adoption over licence revenue" row. A future dual-licence remains *technically* possible —
+the owner holds all copyright and every contributor signs the CLA — but the practical
+leverage of a source-available or proprietary model is largely spent once the code is public
+under MIT. Anyone considering a paid-licence pivot should do it with counsel and few
+outside contributors, and expect adoption, not exclusivity, to be the asset by then.
+
+The clean-room trail, permissive-only dependency policy, and CLA are still worth maintaining:
+they keep the *option* open and they are simply good hygiene for any code that might later be
+offered as a training corpus.
 
 ## What due diligence will look for
 

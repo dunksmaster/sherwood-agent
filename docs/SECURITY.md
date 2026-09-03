@@ -129,13 +129,26 @@ venue. It is treated as security-critical:
 
 ## Disclosure posture
 
-The repository is currently **public**. Publishing the architecture and threat model of a
-system that trades a real account is a modest operational-security cost: it tells a reader
-exactly what to attack and that the operator runs it.
+The repository is **public** — a deliberate choice to develop this as an open-source project
+(standing question Q7, resolved 2026-09-03; see [DECISIONS.md](DECISIONS.md)).
 
-**Recommendation: make the repository private until at least v0.1 is hardened.** Opening it
-later is always possible; un-publishing is not. This is recorded as standing question Q7 in
-[DECISIONS.md](DECISIONS.md).
+The security consequence is accepted and compensated for:
+
+- **The design is public, so the controls must not depend on it being secret.** Every
+  invariant in this document holds against a reader who knows exactly how the system works.
+  Nothing here is security-through-obscurity.
+- **No secret has ever been committed.** History is scanned by `gitleaks` and a third-party
+  scanner on every push; both are green. `config.toml`, `.env`, `*.key`, and keypair files
+  are gitignored and were never tracked.
+- **The operator's identity and the fact they run this is inferable.** That is a real
+  residual risk of a public trading-bot repo. It is accepted. Personal operational details
+  (wallet addresses, account numbers, RPC endpoints, API keys) live only in the local,
+  gitignored config and never in the repository.
+- **`main` is branch-protected** — no direct pushes, PR + green CI required, linear history.
+  A drive-by PR cannot weaken a control without the checks catching it.
+
+If a future change would only be safe while the design is private, that change does not
+belong in this project.
 
 ## Non-goals for v0.1
 

@@ -41,7 +41,7 @@ Pulled out here because they are what lifts the process half of the rubric immed
 - [x] **H1** — `Cargo.lock` un-ignored and committed
 - [x] **H2** — `renovate.json`
 - [x] **H3** — CI gates: `cargo-deny` (+ `deny.toml`; covers RustSec advisories), `gitleaks`, SBOM, doc-links
-- [x] **H4** — `PULL_REQUEST_TEMPLATE.md`, `CODEOWNERS`, issue templates *(branch protection is a GitHub UI setting — set manually)*
+- [x] **H4** — `PULL_REQUEST_TEMPLATE.md`, `CODEOWNERS`, issue templates, **branch protection on `main`** (enabled once the repo went public — strict required checks, PR required, linear history)
 - [x] **H5** — `[workspace.lints]` with `unsafe_code = "forbid"` and the clippy denies, inherited by every crate; `missing_docs` / `pedantic` phased in per crate
 - [x] **H6** — `CHANGELOG.md` *(tag `v0.0.1` cut after this PR merges)*
 - [x] **H7** — `cargo-llvm-cov` summary step in CI
