@@ -38,9 +38,17 @@ gate (Option 3). AI mode: advisory for v0.1. Storage: SQLite via `sqlx`. S0's bl
 decision is closed; Phase 3 is unblocked in principle, pending the S7 research items listed
 in ADR-0001.
 
-**Repository visibility: private.** Standing question Q7 resolved. The architecture and threat
-model of a system that trades a real account should not be public until v0.1 is hardened;
-opening it later is always possible. Recorded in [SECURITY.md](SECURITY.md#disclosure-posture).
+**Repository visibility: public.** Standing question Q7 resolved. Superseded the same-day
+choice of "private": the owner elected to develop this as an open-source project shared with
+the community. The security implications are accepted and compensated for in
+[SECURITY.md](SECURITY.md#disclosure-posture) — the controls do not depend on the design
+being secret, no secret is or was committed, and `main` is branch-protected. Going public
+also unblocks free branch protection and rulesets (P0.2), which require GitHub Pro on a
+private repo.
+
+**Trade recorded against the licensing goal:** a public MIT repository can be used by anyone
+without payment. This narrows, though the owner holding all copyright (plus the CLA) keeps a
+future dual-licence option technically open. See [LICENSING.md](LICENSING.md#current-licence-and-the-open-question).
 
 **Grade target: B (70+).** The repository is presented for licensing against a published
 rubric; B licenses reliably. The gap is mostly code substance and process, not docs — the
@@ -97,5 +105,5 @@ Not blocking the current step, but they need answers before the step named.
 | Q4 | NVIDIA NIM model choice | S4 | Undecided |
 | Q5 | Daily AI spend ceiling | S4 | Undecided |
 | Q6 | Historical data source for backtest | S14 | Undecided |
-| Q7 | ~~Repository visibility~~ | Pre-S0 | **Resolved: private** (2026-09-03) |
+| Q7 | ~~Repository visibility~~ | Pre-S0 | **Resolved: public** (2026-09-04) — open-source project |
 | Q8 | `hoodmap` planning pass — now or later? | — | Parked |
