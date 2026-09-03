@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO portfolio_snapshots (taken_at, state_json) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "b8bb959df15a76fcb1aeb0f2933ed6a3c0501e1a8b46bc19deeb1ff5bc762b94"
+}

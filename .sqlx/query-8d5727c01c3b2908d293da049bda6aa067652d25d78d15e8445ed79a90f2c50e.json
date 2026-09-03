@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO fills\n               (order_id, symbol, address, side, qty, price, fee, venue, filled_at, recorded_at)\n             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "8d5727c01c3b2908d293da049bda6aa067652d25d78d15e8445ed79a90f2c50e"
+}

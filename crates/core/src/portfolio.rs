@@ -1,13 +1,19 @@
-//! A minimal in-memory portfolio ledger.
+//! An in-memory portfolio ledger.
+//!
+//! The ledger holds no I/O itself. `sherwood-store` persists it by serialising
+//! the whole struct to a snapshot row and replaying nothing — the snapshot *is*
+//! the state. Fills are also stored individually so history survives, but the
+//! authoritative balance on restart is the last snapshot.
 
 use crate::types::{Asset, Fill, Side};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Tracks cash and per-asset position size. Not persistent — the CLI is
-/// responsible for snapshotting this to disk if it wants durability.
-#[derive(Debug, Clone)]
+/// Tracks cash and per-asset position size. `serde`-serialisable so a caller can
+/// snapshot and restore it verbatim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Portfolio {
     cash: Decimal,
     positions: HashMap<String, Decimal>,
@@ -45,6 +51,14 @@ impl Portfolio {
     /// Volume-weighted average entry cost for the current position, if any.
     pub fn avg_cost(&self, asset: &Asset) -> Option<Decimal> {
         self.avg_cost.get(&asset.symbol).copied()
+    }
+
+    /// Non-zero positions, as `(symbol, quantity)` pairs. Order is unspecified.
+    pub fn positions(&self) -> impl Iterator<Item = (&str, Decimal)> {
+        self.positions
+            .iter()
+            .filter(|(_, q)| **q != dec!(0))
+            .map(|(s, q)| (s.as_str(), *q))
     }
 
     /// Mark-to-market equity given a price oracle for held assets.
@@ -128,5 +142,25 @@ mod tests {
         // avg cost now 15; sell 20 @ 25 -> pnl = 20 * (25 - 15) = 200
         p.apply(&fill(Side::Sell, dec!(20), dec!(25)));
         assert_eq!(p.realized_pnl(), dec!(200));
+    }
+
+    #[test]
+    fn json_round_trip_is_lossless() {
+        let mut p = Portfolio::new(dec!(1000));
+        p.apply(&fill(Side::Buy, dec!(3), dec!(11)));
+        p.apply(&fill(Side::Buy, dec!(2), dec!(19)));
+        p.apply(&fill(Side::Sell, dec!(1), dec!(25)));
+
+        let json = serde_json::to_string(&p).unwrap();
+        let restored: Portfolio = serde_json::from_str(&json).unwrap();
+        assert_eq!(p, restored);
+    }
+
+    #[test]
+    fn positions_iterator_skips_closed_positions() {
+        let mut p = Portfolio::new(dec!(1000));
+        p.apply(&fill(Side::Buy, dec!(5), dec!(10)));
+        p.apply(&fill(Side::Sell, dec!(5), dec!(12)));
+        assert_eq!(p.positions().count(), 0);
     }
 }

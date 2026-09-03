@@ -11,6 +11,9 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
+  # sqlx query macros check against the committed offline cache (.sqlx/),
+  # so CI needs no database. Regenerate locally with `cargo sqlx prepare`.
+  SQLX_OFFLINE: "true"
 
 jobs:
   check:

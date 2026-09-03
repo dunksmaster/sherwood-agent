@@ -15,3 +15,9 @@ keypair*.json
 *.log
 /data
 /state
+*.db
+*.db-shm
+*.db-wal
+
+# sqlx local dev database (the committed .sqlx/ offline cache is what CI uses)
+crates/store/.sqlx-dev.db*
