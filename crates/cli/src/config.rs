@@ -280,6 +280,11 @@ pub struct ServerSection {
     /// Whether an admin may switch the mode to LIVE at runtime. The bundled
     /// runner is paper-only regardless; this just gates the toggle.
     pub allow_live: bool,
+    /// Global request cap per minute (`0` disables it).
+    pub rate_limit_per_min: u32,
+    /// Browser origins allowed to call the API (the dashboard dev server, the
+    /// served origin). Empty = same-origin only, no CORS headers.
+    pub cors_origins: Vec<String>,
 }
 
 impl Default for ServerSection {
@@ -290,11 +295,22 @@ impl Default for ServerSection {
             operator_token_ref: None,
             viewer_token_ref: None,
             allow_live: false,
+            rate_limit_per_min: 120,
+            cors_origins: Vec::new(),
         }
     }
 }
 
 impl ServerSection {
+    /// The runtime knobs `sherwood-server` needs.
+    pub fn to_opts(&self) -> sherwood_server::ServerOpts {
+        sherwood_server::ServerOpts {
+            allow_live: self.allow_live,
+            rate_limit_per_min: self.rate_limit_per_min,
+            cors_origins: self.cors_origins.clone(),
+        }
+    }
+
     fn validate(&self) -> Result<()> {
         let addr: std::net::SocketAddr = self
             .bind

@@ -16,7 +16,7 @@ axum = { version = "0.8", default-features = false, features = [
 ] }
 tokio = { workspace = true, features = ["net"] }
 tower = "0.5"
-tower-http = { version = "0.6", features = ["trace"] }
+tower-http = { version = "0.6", features = ["trace", "cors"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

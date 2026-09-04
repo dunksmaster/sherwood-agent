@@ -73,7 +73,7 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         tokens,
         RiskGate::new(cfg.risk.to_core()),
         allowlist,
-        cfg.server.allow_live,
+        cfg.server.to_opts(),
     );
 
     let flag = Arc::clone(&shutdown);

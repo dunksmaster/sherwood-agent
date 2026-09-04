@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Metrics, rate limit, CORS (S9c)** — `GET /v1/metrics` returns Prometheus text
+  (hand-rolled counters — request totals, status-class breakdown, uptime, plus `kill_switch`
+  and `mode_live` gauges; no `prometheus` crate). A global fixed-window rate limit
+  (`[server] rate_limit_per_min`, default 120, `0` disables) returns `429` through the error
+  envelope. `[server] cors_origins` allows the dashboard's browser origin; empty = same-origin
+  only. The WebSocket event feed and generated OpenAPI are deferred to S9d — both want the
+  run loop folded into the server first.
 - **RBAC, PAPER/LIVE toggle, kill switch (S9b)** — `sherwood-server` gains three roles
   (`viewer` < `operator` < `admin`), assigned by which configured token authenticates
   (`token_ref` = admin; optional `operator_token_ref` / `viewer_token_ref`). `require_auth`
