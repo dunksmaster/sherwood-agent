@@ -11,6 +11,8 @@
 //! | `GET`  | `/v1/events` | viewer | SSE — new audit-chain rows as they land |
 //! | `GET`  | `/v1/approvals` | viewer | the approval queue + mode |
 //! | `POST` | `/v1/approvals/{id}` | operator | approve / deny a pending order |
+//! | `GET`  | `/v1/session` | viewer | per-session budget usage |
+//! | `POST` | `/v1/session/reset` | admin + re-auth | zero the session budget |
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -36,6 +38,7 @@ use sherwood_execution::{HookGate, HookOutcome, ToolCall, ToolClass};
 use sherwood_store::{AuditEvent, AuditVerification, SqliteStore, Store};
 
 use crate::approvals::{Approval, ApprovalMode, ApprovalState};
+use crate::budget::BudgetView;
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
@@ -161,38 +164,62 @@ pub async fn pretooluse(
     let outcome = HookGate::new(&state.allowlist, &control.risk).evaluate(&req.tool_call, &ctx);
     drop(control); // release the risk-config read lock before any await
 
-    // In `manual` mode a risk-passing *order* is held for the operator. Reads,
-    // cancels, and anything the gate already denied are unaffected.
-    if matches!(outcome, HookOutcome::Allow)
-        && state.approval_mode == ApprovalMode::Manual
-        && state.allowlist.classify(&req.tool_call.name) == Some(ToolClass::PlaceOrder)
-    {
-        if let Ok(order) = parse_order(&req.tool_call.name, &req.tool_call.arguments, Decimal::ZERO)
-        {
-            let ticket = state.approvals.enqueue(&req.tool_call.name, &order);
-            tracing::info!(id = %ticket.id, tool = %req.tool_call.name, "hook: order held for approval");
-            let decided = ticket.wait().await;
-            let held = match decided {
-                ApprovalState::Approved => HookOutcome::Allow,
-                ApprovalState::Denied => HookOutcome::Deny {
+    // Reads, cancels, and anything the gate already denied pass straight
+    // through — the approval gate and the budget only apply to allowed
+    // place-orders.
+    let is_place_order_allow = matches!(outcome, HookOutcome::Allow)
+        && state.allowlist.classify(&req.tool_call.name) == Some(ToolClass::PlaceOrder);
+    if !is_place_order_allow {
+        match &outcome {
+            HookOutcome::Allow => tracing::info!(tool = %req.tool_call.name, "hook: allow"),
+            HookOutcome::Deny { reason } => {
+                tracing::warn!(tool = %req.tool_call.name, reason, "hook: deny")
+            }
+        }
+        return Ok(Json(outcome));
+    }
+
+    // The gate already parsed the order successfully; re-parse for the approval
+    // card and the notional. If that somehow fails, defer to the gate's verdict.
+    let Ok(order) = parse_order(&req.tool_call.name, &req.tool_call.arguments, Decimal::ZERO)
+    else {
+        return Ok(Json(outcome));
+    };
+
+    // `manual` mode: hold the order for the operator.
+    if state.approval_mode == ApprovalMode::Manual {
+        let ticket = state.approvals.enqueue(&req.tool_call.name, &order);
+        tracing::info!(id = %ticket.id, tool = %req.tool_call.name, "hook: order held for approval");
+        match ticket.wait().await {
+            ApprovalState::Approved => {}
+            ApprovalState::Denied => {
+                return Ok(Json(HookOutcome::Deny {
                     reason: "operator denied the order".into(),
-                },
-                ApprovalState::Expired | ApprovalState::Pending => HookOutcome::Deny {
+                }))
+            }
+            ApprovalState::Expired | ApprovalState::Pending => {
+                return Ok(Json(HookOutcome::Deny {
                     reason: "approval timed out".into(),
-                },
-            };
-            tracing::info!(?decided, "hook: approval resolved");
-            return Ok(Json(held));
+                }))
+            }
         }
     }
 
-    match &outcome {
-        HookOutcome::Allow => tracing::info!(tool = %req.tool_call.name, "hook: allow"),
-        HookOutcome::Deny { reason } => {
-            tracing::warn!(tool = %req.tool_call.name, reason, "hook: deny")
-        }
+    // Per-session budget — a hard stop independent of the risk config.
+    let notional = order
+        .limit_price
+        .or(req.context.ref_price)
+        .map(|p| order.qty * p)
+        .unwrap_or(Decimal::ZERO);
+    if let Err(breach) = state.budget.try_record(notional) {
+        tracing::warn!(%breach, tool = %req.tool_call.name, "hook: session budget — denying");
+        return Ok(Json(HookOutcome::Deny {
+            reason: format!("session budget: {breach}"),
+        }));
     }
-    Ok(Json(outcome))
+
+    tracing::info!(tool = %req.tool_call.name, %notional, "hook: allow");
+    Ok(Json(HookOutcome::Allow))
 }
 
 /// Fields common to the privileged toggles: the admin token, again.
@@ -447,6 +474,33 @@ pub async fn post_approval(
         .find(|a| a.id == id)
         .map(Json)
         .ok_or_else(|| ApiError::internal("approval vanished after decision"))
+}
+
+// ---- per-session budget ----
+
+pub async fn get_session(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Json<BudgetView>> {
+    caller.require(Role::Viewer)?;
+    Ok(Json(state.budget.view()))
+}
+
+#[derive(Deserialize)]
+pub struct SessionResetRequest {
+    pub reauth: String,
+}
+
+pub async fn post_session_reset(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<SessionResetRequest>,
+) -> ApiResult<Json<BudgetView>> {
+    caller.require(Role::Admin)?;
+    check_reauth(&state, &req.reauth)?;
+    state.budget.reset();
+    tracing::warn!("session budget reset by admin");
+    Ok(Json(state.budget.view()))
 }
 
 /// How often the SSE stream polls the store for new audit rows.

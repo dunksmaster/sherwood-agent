@@ -81,6 +81,17 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
             "[server] approval_mode = manual — risk-passing orders wait for operator approval"
         );
     }
+    if cfg.server.max_session_orders > 0
+        || cfg.server.max_session_notional > rust_decimal::Decimal::ZERO
+        || cfg.server.max_session_duration_secs > 0
+    {
+        tracing::info!(
+            orders = cfg.server.max_session_orders,
+            notional = %cfg.server.max_session_notional,
+            duration_secs = cfg.server.max_session_duration_secs,
+            "[server] per-session budget caps active"
+        );
+    }
 
     let store = match &cfg.general.state_path {
         Some(path) => {

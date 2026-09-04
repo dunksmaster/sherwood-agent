@@ -293,6 +293,11 @@ pub struct ServerSection {
     pub approval_mode: String,
     /// Seconds a pending approval waits before it auto-denies.
     pub approval_timeout_secs: u64,
+    /// Per-session hard stops. Any `0` means "no limit". Once tripped, every
+    /// further order is denied until `POST /v1/session/reset`.
+    pub max_session_orders: u32,
+    pub max_session_notional: Decimal,
+    pub max_session_duration_secs: u64,
 }
 
 impl Default for ServerSection {
@@ -308,6 +313,9 @@ impl Default for ServerSection {
             static_dir: None,
             approval_mode: "auto".into(),
             approval_timeout_secs: 60,
+            max_session_orders: 0,
+            max_session_notional: dec!(0),
+            max_session_duration_secs: 0,
         }
     }
 }
@@ -324,6 +332,11 @@ impl ServerSection {
             approval_mode: sherwood_server::approvals::ApprovalMode::parse(&self.approval_mode)
                 .unwrap_or(sherwood_server::approvals::ApprovalMode::Auto),
             approval_timeout: std::time::Duration::from_secs(self.approval_timeout_secs.max(1)),
+            budget_caps: sherwood_server::budget::BudgetCaps {
+                max_orders: self.max_session_orders,
+                max_notional: self.max_session_notional,
+                max_duration: std::time::Duration::from_secs(self.max_session_duration_secs),
+            },
         }
     }
 

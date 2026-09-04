@@ -77,6 +77,12 @@ approval_mode        = "auto"          # "auto" = the risk gate decides. "manual
                                        # the dashboard (or on the API).
 approval_timeout_secs = 60             # a pending approval auto-denies after this long
 
+# Per-session hard stops. Any 0 = no limit. Once tripped, every further order is
+# denied until POST /v1/session/reset (admin). Reads and cancels are unaffected.
+max_session_orders        = 0
+max_session_notional      = 0
+max_session_duration_secs = 0
+
 [hook]
 # The PreToolUse order gate (ADR-0001 Option 3). Only tools listed here may be
 # called by the trading agent; each is classified. Empty = deny everything.
