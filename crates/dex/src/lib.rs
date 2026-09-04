@@ -14,8 +14,13 @@
 //! every field matched exactly. That confirms the **encoding** is right. It
 //! does **not** confirm a swap against a real pool will succeed: simulating
 //! (`sherwood dex-simulate`) a swap on the live NVDA/USDG pool still
-//! reverts, from a wallet with confirmed balance and maxed-out approvals —
-//! root cause open, see `crates/dex/README.md`. **Do not sign or broadcast
+//! reverts, from a wallet with confirmed balance and maxed-out approvals.
+//! Narrowed but not solved: it isn't the RPC plumbing, isn't "wrong pool by
+//! liquidity ranking" (tried two pools at very different fee tiers, both
+//! revert identically), and isn't the Permit2/SETTLE or PoolManager/TAKE
+//! steps (both proven to work in isolation, directly against the live
+//! chain) — leaving the swap action itself as the remaining suspect, by
+//! elimination. See `crates/dex/README.md`. **Do not sign or broadcast
 //! anything this crate builds until `sherwood dex-simulate` for that exact
 //! pool returns success.**
 

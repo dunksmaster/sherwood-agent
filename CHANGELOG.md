@@ -101,9 +101,20 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   live NVDA/USDG pool still reverts with empty revert data, from a wallet confirmed — at call
   time — to hold ample balance and have both approvals maxed out; smaller amounts and looser
   slippage didn't change the outcome, and re-simulating the real successful transaction (ruling
-  out `eth_call` plumbing as the cause) succeeds cleanly. Root cause is open — see
-  [`crates/dex/README.md`](crates/dex/README.md). **Do not sign or broadcast anything this
-  crate builds until `sherwood dex-simulate` for that exact pool returns success first.**
+  out `eth_call` plumbing as the cause) succeeds cleanly.
+
+  **Follow-up narrowing (still root-cause-open):** tried a second NVDA/USDG pool at the fee
+  tier (375/tickSpacing 4) a *different* Stock Token pair's real successful swap actually used
+  — reverts identically to the first (fee 3000/tickSpacing 60, ~78× the raw liquidity), ruling
+  out "picked the wrong pool by liquidity ranking." Directly verified, bypassing the
+  router/pool entirely: `Permit2.transferFrom` moves this wallet's real USDG when called as the
+  router (the SETTLE mechanism works), and `NVDA.transfer` succeeds when called as the
+  `PoolManager` (the TAKE mechanism works). That leaves the `SWAP_EXACT_IN_SINGLE` action's own
+  execution as the remaining suspect, by elimination rather than confirmed — a
+  `debug_traceCall`-capable RPC (not available on the public endpoint used here) would settle
+  it outright. See [`crates/dex/README.md`](crates/dex/README.md). **Do not sign or broadcast
+  anything this crate builds until `sherwood dex-simulate` for that exact pool returns success
+  first.**
   19 unit tests (structural correctness only — see above for what they do and don't prove).
   Same boundary as every crate below it: no RPC client, no method that sends anything;
   `eth_sendRawTransaction` does not appear anywhere in this codebase.
