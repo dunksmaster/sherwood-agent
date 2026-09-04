@@ -461,3 +461,180 @@ mod tests {
             .is_ok());
     }
 }
+
+/// Property tests: over a wide space of configs, orders, and portfolio states,
+/// the gate never panics and every *accepted* order respects every cap that
+/// applies to it. This is the machine-checked version of the invariants in
+/// `docs/SECURITY.md` and `docs/AI-SAFETY.md` — no strategy or model output,
+/// however malformed, can produce a gate pass that breaks a limit.
+///
+/// The paper path uses no randomness, so there is no seeded RNG to exercise
+/// here; the gate itself is already deterministic (proven below).
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use crate::types::{Asset, OrderId, Venue};
+    use proptest::prelude::*;
+
+    fn any_dec() -> impl Strategy<Value = Decimal> {
+        (-2_000_000i64..2_000_000i64).prop_map(|n| Decimal::new(n, 2))
+    }
+    fn pos_dec() -> impl Strategy<Value = Decimal> {
+        (1i64..2_000_000i64).prop_map(|n| Decimal::new(n, 2))
+    }
+    fn frac_dec() -> impl Strategy<Value = Decimal> {
+        (0i64..80i64).prop_map(|n| Decimal::new(n, 3))
+    }
+
+    prop_compose! {
+        fn any_cfg()(
+            max_order_notional in pos_dec(),
+            max_position_fraction in (1i64..300).prop_map(|n| Decimal::new(n, 2)),
+            max_daily_loss in pos_dec(),
+            max_unrealized_loss in pos_dec(),
+            max_open_positions in 0usize..4,
+            order_cooldown_secs in 0u64..90,
+            max_slippage in frac_dec(),
+            kill_switch in any::<bool>(),
+        ) -> RiskConfig {
+            RiskConfig {
+                max_order_notional,
+                max_position_fraction,
+                max_daily_loss,
+                max_unrealized_loss,
+                max_open_positions,
+                order_cooldown_secs,
+                max_slippage,
+                allowlist: Default::default(),
+                denylist: Default::default(),
+                kill_switch,
+            }
+        }
+    }
+
+    prop_compose! {
+        fn any_order()(
+            is_buy in any::<bool>(),
+            qty in pos_dec(),
+            price in pos_dec(),
+            slip in frac_dec(),
+        ) -> Order {
+            Order {
+                id: OrderId::new("p"),
+                asset: Asset::symbol("ROAR"),
+                side: if is_buy { Side::Buy } else { Side::Sell },
+                qty,
+                limit_price: Some(price),
+                max_slippage: slip,
+                venue: Venue::Paper,
+                reason: "prop".into(),
+            }
+        }
+    }
+
+    fn now_ts() -> DateTime<Utc> {
+        DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap()
+    }
+
+    proptest! {
+        /// The gate never panics, and is a pure function of its inputs.
+        #[test]
+        fn check_is_total_and_deterministic(
+            cfg in any_cfg(), ord in any_order(),
+            cash in pos_dec(), equity in any_dec(), unrealized in any_dec(),
+        ) {
+            let gate = RiskGate::new(cfg);
+            let p = Portfolio::new(cash);
+            let ctx = GateContext {
+                portfolio: &p, ref_price: None, equity,
+                unrealized_pnl: unrealized, last_order_at: None, now: now_ts(),
+            };
+            let a = gate.check(&ord, &ctx);
+            let b = gate.check(&ord, &ctx);
+            prop_assert_eq!(a, b);
+        }
+
+        /// Kill switch dominates everything.
+        #[test]
+        fn kill_switch_rejects_all(
+            mut cfg in any_cfg(), ord in any_order(), cash in pos_dec(), equity in pos_dec(),
+        ) {
+            cfg.kill_switch = true;
+            let gate = RiskGate::new(cfg);
+            let p = Portfolio::new(cash);
+            let ctx = GateContext {
+                portfolio: &p, ref_price: None, equity,
+                unrealized_pnl: dec!(0), last_order_at: None, now: now_ts(),
+            };
+            prop_assert_eq!(gate.check(&ord, &ctx), Err(RiskReject::KillSwitch));
+        }
+
+        /// An accepted order — buy or sell — is within the notional and
+        /// slippage caps.
+        #[test]
+        fn accepted_order_respects_notional_and_slippage(
+            cfg in any_cfg(), ord in any_order(), cash in pos_dec(), equity in pos_dec(),
+        ) {
+            let gate = RiskGate::new(cfg.clone());
+            let p = Portfolio::new(cash);
+            let ctx = GateContext {
+                portfolio: &p, ref_price: None, equity,
+                unrealized_pnl: dec!(0), last_order_at: None, now: now_ts(),
+            };
+            if gate.check(&ord, &ctx).is_ok() {
+                let price = ord.limit_price.unwrap();
+                prop_assert!(ord.qty * price <= cfg.max_order_notional);
+                prop_assert!(ord.max_slippage <= cfg.max_slippage);
+            }
+        }
+
+        /// An accepted buy leaves the position within `max_position_fraction`
+        /// (flat portfolio, so resulting = qty * price).
+        #[test]
+        fn accepted_buy_respects_position_fraction(
+            cfg in any_cfg(), qty in pos_dec(), price in pos_dec(),
+            slip in frac_dec(), cash in pos_dec(), equity in pos_dec(),
+        ) {
+            let gate = RiskGate::new(cfg.clone());
+            let p = Portfolio::new(cash);
+            let ord = Order {
+                id: OrderId::new("p"), asset: Asset::symbol("ROAR"), side: Side::Buy,
+                qty, limit_price: Some(price), max_slippage: slip,
+                venue: Venue::Paper, reason: "prop".into(),
+            };
+            let ctx = GateContext {
+                portfolio: &p, ref_price: None, equity,
+                unrealized_pnl: dec!(0), last_order_at: None, now: now_ts(),
+            };
+            if gate.check(&ord, &ctx).is_ok() && equity > dec!(0) {
+                prop_assert!((qty * price) / equity <= cfg.max_position_fraction);
+            }
+        }
+
+        /// A de-risking sell is never blocked by the buy-only entry limits:
+        /// with hard stops clear and the order within the notional/slippage
+        /// caps, a sell always passes.
+        #[test]
+        fn sell_passes_when_hard_stops_clear(
+            mut cfg in any_cfg(), qty in pos_dec(), price in pos_dec(),
+            cash in pos_dec(), equity in pos_dec(),
+        ) {
+            cfg.kill_switch = false;
+            let gate = RiskGate::new(cfg.clone());
+            let p = Portfolio::new(cash); // realized P&L = 0 > -max_daily_loss
+            let ord = Order {
+                id: OrderId::new("p"), asset: Asset::symbol("ROAR"), side: Side::Sell,
+                qty, limit_price: Some(price), max_slippage: dec!(0),
+                venue: Venue::Paper, reason: "prop".into(),
+            };
+            let ctx = GateContext {
+                portfolio: &p, ref_price: None, equity,
+                unrealized_pnl: dec!(-999_999), last_order_at: Some(now_ts()), now: now_ts(),
+            };
+            if qty * price <= cfg.max_order_notional {
+                prop_assert!(gate.check(&ord, &ctx).is_ok(),
+                    "sell within the notional cap must pass, got {:?}", gate.check(&ord, &ctx));
+            }
+        }
+    }
+}

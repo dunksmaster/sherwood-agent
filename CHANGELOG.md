@@ -8,7 +8,14 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **`proptest` on the risk gate (S5.7)** — 5 properties over a wide space of configs, orders,
+  and portfolio states: `RiskGate::check` never panics and is deterministic; the kill switch
+  dominates every other outcome; an accepted order (buy or sell) is always within the
+  notional and slippage caps; an accepted buy leaves the position within
+  `max_position_fraction`; and a de-risking sell within the notional cap always passes once
+  the hard stops are clear. The machine-checked form of the invariants in `SECURITY.md` /
+  `AI-SAFETY.md`. (Seeded RNG is N/A — the paper path uses no randomness.)
 
 ## [0.1.0] - 2026-09-04
 
