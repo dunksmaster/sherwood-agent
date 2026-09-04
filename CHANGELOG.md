@@ -57,6 +57,22 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   exact `(token, denom)` pair (`discover_pools_for_pair`, both `Initialize`-topic orderings);
   `find_best_pool`/`read_price` now take an explicit `denom` address. Covered by a new
   regression test asserting a pool paired against a third token is excluded.
+- **`sherwood-signer` — key custody + EIP-1559 signing (v0.2.2).** New crate: `LocalSigner`
+  loads a secp256k1 key from the `sherwood-secrets` vault (hex, via `sherwood secrets set` —
+  stdin only, never argv), derives its address, and signs an `Eip1559Tx` into raw
+  `eth_sendRawTransaction`-ready bytes. **Sign-local, broadcast-explicit**: no RPC client, no
+  method that sends anything, and `Debug` never prints the key (`finish_non_exhaustive`) — a
+  `sherwood wallet-address <name>` command prints only the derived address. A hand-rolled RLP
+  encoder (known-answer tested against the canonical RLP examples) and low-`s` signature
+  normalisation (EIP-2) with the recovery id kept consistent, verified by a self-consistent
+  sign → recover → address round trip. 21 unit tests. New deps: `k256`, `zeroize`
+  (MIT/Apache). [THREAT-MODEL.md](docs/THREAT-MODEL.md#key-custody-v022-sherwood-signer)
+  gained a key-custody section.
+
+  **Also fixed while wiring the CLI:** `sherwood secrets set` now strips a leading UTF-8 BOM
+  — PowerShell's `Get-Content x | sherwood secrets set` writes one, which silently corrupted
+  every secret stored that way (caught by the first `wallet-address` smoke test: a
+  clean 64-hex-char key failed to parse as "odd number of digits" until this fix).
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**

@@ -47,6 +47,10 @@ pub fn run(mut args: impl Iterator<Item = String>) -> Result<()> {
             std::io::stdin()
                 .read_to_string(&mut value)
                 .context("reading the value from stdin")?;
+            // Strip a leading UTF-8 BOM (PowerShell's `|` into a native
+            // process commonly writes one — `Get-Content x | sherwood
+            // secrets set` reproduces this) and a trailing newline.
+            let value = value.strip_prefix('\u{feff}').unwrap_or(&value);
             let value = value.trim_end_matches(['\n', '\r']);
             if value.is_empty() {
                 bail!("no value on stdin");

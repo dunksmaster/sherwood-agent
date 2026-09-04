@@ -10,6 +10,7 @@ members = [
     "crates/sniper",
     "crates/decision",
     "crates/chain",
+    "crates/signer",
     "crates/server",
     "crates/cli",
 ]

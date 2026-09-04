@@ -6,6 +6,16 @@ owner-step: S0
 
 # Going live
 
+> **Venue re-targeted 2026-09-04** ([ADR-0006](adr/0006-robinhood-chain-venue.md)): live
+> execution targets **Robinhood Chain** (a self-custody EVM wallet + Uniswap v4), not the
+> Robinhood Agentic Trading MCP — the MCP is US/EEA-gated and unavailable to the operator.
+> The **operator boundary below still holds in full**: you fund the wallet, you enable live
+> mode, you accept the risk. Steps 1–3 (Robinhood account / MCP / crypto agreement) are now
+> moot; step 4 becomes "fund a self-custody wallet and hand its key to the vault" — see
+> `sherwood wallet-address` and [`sherwood-signer`](../crates/signer/README.md) (v0.2.2, key
+> custody + signing only — nothing broadcasts yet). This document otherwise predates the
+> pivot; treat the MCP-specific steps as historical until it's rewritten for the new venue.
+
 This repository ships without a working live execution path, on purpose. The `sherwood`
 binary refuses any mode that is not `paper`, and `LiveExecutor` returns
 `ExecError::LiveNotConfigured` on every call.

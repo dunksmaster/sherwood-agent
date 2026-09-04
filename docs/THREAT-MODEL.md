@@ -54,6 +54,7 @@ Three boundaries matter most:
 | Local API token | Full control of the system, including the live toggle |
 | The audit log | Evidence; loss of it means loss of accountability |
 | Config (risk caps, allowlists) | Weakening these silently removes every protection |
+| The Robinhood Chain wallet private key (v0.2.2+) | Direct, irreversible financial loss on an EVM chain — no chargeback, no support line |
 
 ## STRIDE
 
@@ -122,6 +123,21 @@ API client, and it deserves naming:
 | The agent is steered by injected content in market data | AI-safety controls; the gate does not trust the reason string; caps bound the damage |
 | The agent's own credentials or environment are compromised | Agent runs with a minimal environment; no unrelated credentials in scope; the account it can reach is the Agentic account only |
 | The agent retries around a denial | Denials are recorded; repeated denials within a window trip an alert and then the kill switch |
+
+## Key custody (v0.2.2, `sherwood-signer`)
+
+New asset, new crate — recorded here rather than reopening the v0.1 sign-off below, which
+still stands for the paper system it reviewed. `sherwood-signer` **signs only**: it holds a
+secp256k1 key and turns a transaction into signed bytes; it has no RPC client and no method
+that broadcasts anything. Nothing in the codebase calls it yet — there is no live path.
+
+| Threat | Mitigation |
+|---|---|
+| The key is captured through a form, a log, an error message, or `Debug` output | The vault's `secrets set` reads stdin only, never argv; `LocalSigner`'s `Debug` impl prints only the derived address (`finish_non_exhaustive`, no key field); no method on `LocalSigner` returns the key; decoded key bytes are wrapped in `Zeroizing` and explicitly zeroed after use |
+| The key sits in config or is committed | Config never holds a raw key, only a `vault:NAME` reference (the existing pattern from `[ai] api_key`) |
+| Compromise of the vault passphrase / the operator's machine | Same residual risk as every other vault secret — see "Residual risks" below. A wallet key raises the stakes (irreversible on-chain loss) without changing the mitigation |
+| A signing bug produces a transaction that spends more, or differently, than intended | Unit-tested offline only so far (RLP known-answer vectors, a self-consistent sign→recover→address round trip). **Not sufficient on its own** — before any real funds are at risk, sign one transaction, decode it independently, and confirm the sender matches the funded wallet. `sherwood-dex` (the swap-building crate) additionally bounds `slippage`/`deadline`/`minOut` before a signed tx is ever produced |
+| The signed transaction is broadcast without the operator's intent | Not yet possible — no code path calls `eth_sendRawTransaction`. When one exists (`sherwood-dex` + live mode), it inherits `allow_live` + admin + explicit toggle, plus ADR-0006's mandatory pre-flight (refuse to arm if `rhc-probe`'s fresh-address transfer check stops passing) |
 
 ## Residual risks — accepted for v0.1
 
