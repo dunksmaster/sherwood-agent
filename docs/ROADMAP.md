@@ -160,6 +160,7 @@ client — the agent CLI owns the MCP connection.
 | S7.1 | Hook decision core — `ToolCall` in, `HookOutcome` (allow / deny) out; `evaluate_payload` for a raw body | `execution` | done — `execution::hook` |
 | S7.2 | **Tool allowlist** — only classified tool names may be invoked, everything else denied; order tools are parsed + risk-checked, reads and cancels pass, cancels pass even under a hard stop | `execution` | done — `ToolAllowlist` / `HookGate` |
 | S7.2a | Order-argument parser — agent tool args → `core::Order`, strict, unparseable ⇒ deny | `execution` | done — `execution::order_parse` |
+| S7.2b | The `PreToolUse` hook script — [`scripts/pretooluse-hook.mjs`](../scripts/README.md): reads an agent's tool-call event, `POST`s it to `/v1/hook/pretooluse`, maps `{decision}` onto the CLI's permission schema, fails closed. Tested end-to-end against a local `sherwood serve`; not yet against a live agent + MCP. | `scripts` | done |
 | S7.3 | `RobinhoodExecutor` — place, cancel, status (Option 1 second mode; not on the v0.1 path) | `execution` | deferred — Option 3 has the agent place orders |
 | S7.4 | Order-status reconciliation against the agentic order ledger | `execution` | pending — needs the live MCP |
 | S7.5 | Portfolio, positions, and quote reads | `execution` | pending — needs the live MCP |
@@ -170,9 +171,9 @@ client — the agent CLI owns the MCP connection.
 | S8.3 | Fail-closed: no new orders when the session has been down beyond a threshold | `execution` | pending — the hook already fails closed when `sherwood-server` is unreachable |
 | S8.4 | Supersede logic for a replaced session | `execution` | pending |
 
-The hook's HTTP surface (an axum route calling `HookGate::evaluate`), the agent-process
-supervision, and the hook script that adapts `HookOutcome` to the CLI's permission schema all
-land with S9 (`sherwood-server`).
+The hook's HTTP surface (`POST /v1/hook/pretooluse`) landed with S9a and the hook script with
+S7.2b. What still needs a live connection: agent-process supervision, order-status
+reconciliation (S7.4), and driving the hook from a real headless `claude` / `codex`.
 
 ## S9–S13 — ops shell
 

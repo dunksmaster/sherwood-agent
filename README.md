@@ -91,6 +91,7 @@ sherwood-agent/
 │   ├── sniper/       library scaffold — deferred to v0.2
 │   └── cli/          the `sherwood` binary
 ├── frontend/         React + Vite + TS control-plane dashboard
+├── scripts/          check-doc-links.py, the PreToolUse hook bridge
 ├── deploy/           Prometheus scrape + alert rules, Grafana dashboard JSON
 ├── Dockerfile        multi-stage build → debian:slim runtime (see docs/DEPLOYMENT.md)
 ├── docker-compose.yml
