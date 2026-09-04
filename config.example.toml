@@ -65,6 +65,10 @@ token_ref = "vault:api_token"   # the ADMIN token. Generated into the vault on f
 allow_live         = false      # true = an admin may switch the server to LIVE mode at
                                 # runtime (admin token + body re-auth). The bundled runner
                                 # is paper-only regardless.
+rate_limit_per_min = 120        # global request cap per minute (0 = disabled)
+cors_origins       = []         # browser origins allowed to call the API, e.g.
+                                # ["http://localhost:5173"] for the dashboard dev server.
+                                # Empty = same-origin only.
 
 [hook]
 # The PreToolUse order gate (ADR-0001 Option 3). Only tools listed here may be

@@ -10,11 +10,12 @@ generated: false
 The full reference will be generated from `utoipa` annotations at **S9c**; edit the
 annotations, not this document, once that lands.
 
-## Routes so far (S9a–S9b — `sherwood-server`)
+## Routes so far (S9a–S9c — `sherwood-server`)
 
 | Method | Path | Min role | Notes |
 |---|---|---|---|
 | `GET` | `/v1/health` | none | `{ status, mode, kill_switch, uptime_secs }` |
+| `GET` | `/v1/metrics` | none | Prometheus text exposition |
 | `GET` | `/v1/control` | viewer | `{ mode, kill_switch }` |
 | `POST` | `/v1/hook/pretooluse` | operator | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
 | `POST` | `/v1/mode` | admin | `{ mode: "paper"\|"live", reauth: "<admin token>" }`. `live` is `403` unless `[server] allow_live = true`. |
@@ -24,6 +25,10 @@ Roles are assigned by which configured token authenticates: `token_ref` → admi
 `operator_token_ref` → operator, `viewer_token_ref` → viewer. The server binds loopback only
 (a non-loopback bind is refused — TLS is a later concern). Tokens are generated into the
 `sherwood-secrets` vault on first `sherwood serve` and compared in constant time.
+
+A global fixed-window rate limit (`[server] rate_limit_per_min`, default 120) returns `429`
+with the standard envelope when exceeded. CORS headers are emitted only for origins listed in
+`[server] cors_origins`. `utoipa`-generated OpenAPI replaces this file at S9d.
 
 ## Contract (from [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md#api))
 

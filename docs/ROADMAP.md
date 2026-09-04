@@ -174,7 +174,8 @@ land with S9 (`sherwood-server`).
 |---|---|---|---|
 | S9a | `sherwood-server` skeleton: axum on loopback (non-loopback bind refused), one `{code,message,correlation_id}` error envelope, bearer-token auth (constant-time, token generated into the vault on first run), `GET /v1/health`, `POST /v1/hook/pretooluse` wired to S7's `HookGate`. `sherwood serve <config>` with `[server]` + `[hook]` config | `server`, `cli` | done |
 | S9b | RBAC roles (`viewer` / `operator` / `admin`), PAPER/LIVE toggle (admin + body re-auth, gated by `[server] allow_live`), kill-switch endpoint (admin + body re-auth), `GET /v1/control` | `server` | done |
-| S9c | WebSocket event feed (bridges `sherwood-events`), `/metrics`, `utoipa`-generated OpenAPI, per-IP / per-token rate limiting, localhost CORS | `server` | pending |
+| S9c | `GET /v1/metrics` (Prometheus text, hand-rolled — no `prometheus` crate), global fixed-window rate limit (`[server] rate_limit_per_min`), CORS for configured dashboard origins | `server` | done |
+| S9d | WebSocket event feed (bridges `sherwood-events`) + `utoipa`-generated OpenAPI | `server` | deferred — both want the run loop folded into the server (S11) and a stable route set |
 | S10 | Dashboard: React + Vite + shadcn/ui — auth, config, portfolio, activity feed, PAPER/LIVE badge, kill-switch button | `frontend/` |
 | S11 | Approval gate: state machine (proposed → pending → approved → executed → settled, or denied), WebSocket push, order cards with the AI's reasoning, manual and auto modes, auto-deny timeout, revocation before execution | `runtime` |
 | S12 | Scheduler and monitors: `tokio-cron-scheduler`, timezone handling, price-threshold monitors, per-run budgets (max orders, max notional, max duration) with hard stops | `runtime` |

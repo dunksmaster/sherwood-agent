@@ -1,14 +1,14 @@
 //! `sherwood-server` — the local control-plane HTTP API.
 //!
-//! Bound to loopback, bearer-token auth with three RBAC roles
-//! (`viewer` / `operator` / `admin`), one error envelope. S9a shipped the
-//! skeleton and the `PreToolUse` order hook; S9b (this) adds the roles, the
-//! PAPER/LIVE toggle, and the kill-switch endpoint. The WebSocket event feed,
-//! `/metrics`, generated OpenAPI, and rate limiting are S9c.
+//! Loopback bind, bearer auth with three RBAC roles, one error envelope, a
+//! global rate limit, CORS for the dashboard origin, and Prometheus metrics.
+//! The WebSocket event feed and generated OpenAPI wait on S11 (they need the
+//! run loop folded into the server) and route stability.
 //!
 //! | Method | Path | Min role | Notes |
 //! |---|---|---|---|
 //! | GET  | `/v1/health` | none | liveness, mode, kill-switch, uptime |
+//! | GET  | `/v1/metrics` | none | Prometheus text |
 //! | GET  | `/v1/control` | viewer | current mode + kill-switch |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
@@ -18,34 +18,61 @@
 
 pub mod auth;
 pub mod error;
+pub mod limit;
+pub mod metrics;
+mod mw;
 pub mod routes;
 pub mod state;
 
 pub use error::{ApiError, ApiResult};
-pub use state::{AppState, Mode};
+pub use state::{AppState, Mode, ServerOpts};
 
+use axum::http::{
+    header::{AUTHORIZATION, CONTENT_TYPE},
+    HeaderValue, Method,
+};
+use axum::middleware::from_fn_with_state;
 use axum::routing::{get, post};
 use axum::Router;
 use std::future::Future;
 use std::net::SocketAddr;
+use tower_http::cors::CorsLayer;
+use tower_http::trace::TraceLayer;
 
-/// Build the router. `/v1/health` is open; every other route runs behind
-/// [`auth::require_auth`] and then checks its own minimum role.
+fn build_cors(origins: &[String]) -> CorsLayer {
+    if origins.is_empty() {
+        // No configured origins → no CORS headers (same-origin only).
+        return CorsLayer::new();
+    }
+    let allowed: Vec<HeaderValue> = origins.iter().filter_map(|o| o.parse().ok()).collect();
+    CorsLayer::new()
+        .allow_origin(allowed)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([AUTHORIZATION, CONTENT_TYPE])
+}
+
+/// Build the router. `/v1/health` and `/v1/metrics` are open; every other route
+/// runs behind [`auth::require_auth`] and then checks its own minimum role.
+/// Applied to everything, outermost first: rate limit → tracing → CORS →
+/// metrics accounting.
 pub fn router(state: AppState) -> Router {
+    let cors = build_cors(&state.cors_origins);
+
     let protected = Router::new()
         .route("/v1/control", get(routes::get_control))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
-        .route_layer(axum::middleware::from_fn_with_state(
-            state.clone(),
-            auth::require_auth,
-        ));
+        .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
     Router::new()
         .route("/v1/health", get(routes::health))
+        .route("/v1/metrics", get(routes::metrics))
         .merge(protected)
-        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(from_fn_with_state(state.clone(), mw::record_metrics))
+        .layer(cors)
+        .layer(TraceLayer::new_for_http())
+        .layer(from_fn_with_state(state.clone(), mw::rate_limit))
         .with_state(state)
 }
 
@@ -95,7 +122,7 @@ mod tests {
     const ADMIN: &str = "admin-token";
     const OPERATOR: &str = "operator-token";
 
-    fn test_state() -> AppState {
+    fn state_with(opts: ServerOpts) -> AppState {
         let allowlist = ToolAllowlist::from_pairs([
             ("get_positions", ToolClass::ReadOnly),
             ("place_order", ToolClass::PlaceOrder),
@@ -110,15 +137,11 @@ mod tests {
             Some(auth::ApiToken::from_value(OPERATOR)),
             None,
         );
-        AppState::new(tokens, risk, allowlist, /* allow_live */ false)
+        AppState::new(tokens, risk, allowlist, opts)
     }
 
-    fn allow_live_state() -> AppState {
-        let s = test_state();
-        AppState {
-            allow_live: true,
-            ..s
-        }
+    fn test_state() -> AppState {
+        state_with(ServerOpts::default())
     }
 
     fn ctx_json() -> serde_json::Value {
@@ -135,6 +158,10 @@ mod tests {
         String::from_utf8(bytes.to_vec()).unwrap()
     }
 
+    fn get(path: &str) -> Request<Body> {
+        Request::get(path).body(Body::empty()).unwrap()
+    }
+
     fn post(path: &str, token: Option<&str>, json: serde_json::Value) -> Request<Body> {
         let mut b = Request::post(path).header("content-type", "application/json");
         if let Some(t) = token {
@@ -149,15 +176,43 @@ mod tests {
 
     #[tokio::test]
     async fn health_needs_no_auth_and_shows_kill_switch() {
-        let resp = call(
-            test_state(),
-            Request::get("/v1/health").body(Body::empty()).unwrap(),
-        )
-        .await;
+        let resp = call(test_state(), get("/v1/health")).await;
         assert_eq!(resp.status(), StatusCode::OK);
         let b = body_string(resp).await;
         assert!(b.contains("\"mode\":\"paper\""));
         assert!(b.contains("\"kill_switch\":false"));
+    }
+
+    #[tokio::test]
+    async fn metrics_is_open_and_counts_requests() {
+        let state = test_state();
+        call(state.clone(), get("/v1/health")).await;
+        call(state.clone(), get("/v1/does-not-exist")).await;
+        let resp = call(state, get("/v1/metrics")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_string(resp).await;
+        assert!(b.contains("sherwood_requests_total"));
+        assert!(b.contains("sherwood_responses_total{class=\"2xx\"}"));
+        assert!(b.contains("sherwood_responses_total{class=\"4xx\"}"));
+        assert!(b.contains("sherwood_kill_switch 0"));
+        assert!(b.contains("sherwood_mode_live 0"));
+    }
+
+    #[tokio::test]
+    async fn rate_limit_returns_429_through_the_envelope() {
+        let state = state_with(ServerOpts {
+            rate_limit_per_min: 3,
+            ..ServerOpts::default()
+        });
+        for _ in 0..3 {
+            let r = call(state.clone(), get("/v1/health")).await;
+            assert_eq!(r.status(), StatusCode::OK);
+        }
+        let resp = call(state, get("/v1/health")).await;
+        assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(body_string(resp)
+            .await
+            .contains("\"code\":\"rate_limited\""));
     }
 
     #[tokio::test]
@@ -232,7 +287,6 @@ mod tests {
     #[tokio::test]
     async fn kill_switch_engaged_then_the_hook_denies_orders() {
         let state = test_state();
-
         let resp = call(
             state.clone(),
             post(
@@ -283,8 +337,12 @@ mod tests {
         .await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
 
+        let allow = state_with(ServerOpts {
+            allow_live: true,
+            ..ServerOpts::default()
+        });
         let resp = call(
-            allow_live_state(),
+            allow,
             post(
                 "/v1/mode",
                 Some(ADMIN),

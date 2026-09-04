@@ -13,6 +13,8 @@
 //! permission schema. Only a malformed request is a `4xx`.
 
 use axum::extract::State;
+use axum::http::header::CONTENT_TYPE;
+use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
@@ -40,6 +42,29 @@ pub async fn health(State(state): State<AppState>) -> Json<Health> {
         kill_switch: control.kill_switch(),
         uptime_secs: state.uptime_secs(),
     })
+}
+
+/// `GET /v1/metrics` — Prometheus text. Open, like `/v1/health`; the server is
+/// loopback-only.
+pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
+    let (mode, kill) = {
+        let c = state.control.read().await;
+        (c.mode, c.kill_switch())
+    };
+    let extra = format!(
+        "# HELP sherwood_kill_switch 1 if the kill switch is engaged.\n\
+         # TYPE sherwood_kill_switch gauge\n\
+         sherwood_kill_switch {}\n\
+         # HELP sherwood_mode_live 1 if the server is in LIVE mode.\n\
+         # TYPE sherwood_mode_live gauge\n\
+         sherwood_mode_live {}\n",
+        u8::from(kill),
+        u8::from(mode == Mode::Live),
+    );
+    (
+        [(CONTENT_TYPE, "text/plain; version=0.0.4")],
+        state.metrics.render(&extra),
+    )
 }
 
 #[derive(Serialize)]

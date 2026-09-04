@@ -104,9 +104,10 @@ requires the admin role and is audited. Recovery procedure lives in
   redesign. *Done (S9b).*
 - The live toggle and the kill switch require the admin role **and** the admin token again in
   the request body. LIVE is additionally gated by `[server] allow_live`. *Done (S9b).*
-- CORS restricted to the local origin. Strict CSP on the frontend. No external script or
-  style origins. *Pending (S9c / S10).*
-- Rate limiting per IP and per token, on both REST and WebSocket upgrade. *Pending (S9c).*
+- CORS headers are emitted only for origins in `[server] cors_origins` (empty = same-origin
+  only). Strict CSP on the frontend, no external script/style origins: *pending (S10).*
+- Global fixed-window rate limit (`[server] rate_limit_per_min`), `429` through the error
+  envelope. *Done (S9c).* Per-token limits and the WebSocket upgrade path: *pending (S9d).*
 
 ## The approval hook
 

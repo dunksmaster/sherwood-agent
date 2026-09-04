@@ -24,6 +24,9 @@ pub enum ApiError {
     /// The request parsed but described something we cannot act on.
     #[error("{0}")]
     Unprocessable(String),
+    /// The global rate-limit window is full.
+    #[error("rate limit exceeded — slow down")]
+    TooManyRequests,
     /// Our fault. The message is logged, never returned.
     #[error("internal error")]
     Internal(String),
@@ -52,6 +55,7 @@ impl ApiError {
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -62,6 +66,7 @@ impl ApiError {
             Self::Forbidden(_) => "forbidden",
             Self::BadRequest(_) => "bad_request",
             Self::Unprocessable(_) => "unprocessable_entity",
+            Self::TooManyRequests => "rate_limited",
             Self::Internal(_) => "internal",
         }
     }
