@@ -50,6 +50,8 @@ pub struct AppConfig {
     pub hook: HookSection,
     #[serde(default)]
     pub chain: ChainSection,
+    #[serde(default)]
+    pub wallets: Vec<WalletEntry>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -460,6 +462,68 @@ impl HookSection {
     }
 }
 
+/// One `[[wallets]]` entry: a name, which vault key it signs with, what it
+/// may trade, and its spend ceiling. See `sherwood-wallets`. Loading these
+/// (`sherwood wallets`) resolves each `key_ref` — no wallet is a silent
+/// no-op if its secret is missing.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct WalletEntry {
+    pub name: String,
+    /// A `vault:NAME` reference — same pattern as `[ai] api_key`.
+    pub key_ref: String,
+    /// Symbols this wallet may trade. Empty = no restriction.
+    pub allowed_symbols: Vec<String>,
+    /// Any `0` = unlimited.
+    pub max_tx_count: u32,
+    pub max_notional: Decimal,
+    pub max_duration_secs: u64,
+}
+
+impl Default for WalletEntry {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            key_ref: String::new(),
+            allowed_symbols: Vec::new(),
+            max_tx_count: 0,
+            max_notional: Decimal::ZERO,
+            max_duration_secs: 0,
+        }
+    }
+}
+
+impl WalletEntry {
+    fn validate(&self) -> Result<()> {
+        if self.name.is_empty() {
+            bail!("every [[wallets]] entry needs a name");
+        }
+        if self.key_ref.is_empty() {
+            bail!("wallets.{}: key_ref must not be empty", self.name);
+        }
+        require_at_least(
+            &format!("wallets.{}.max_notional", self.name),
+            self.max_notional,
+            dec!(0),
+        )?;
+        Ok(())
+    }
+
+    #[must_use]
+    pub fn to_core(&self) -> sherwood_wallets::WalletConfig {
+        sherwood_wallets::WalletConfig {
+            name: self.name.clone(),
+            key_ref: self.key_ref.clone(),
+            allowed_symbols: self.allowed_symbols.clone(),
+            limits: sherwood_wallets::budget::WalletLimits {
+                max_tx_count: self.max_tx_count,
+                max_notional: self.max_notional,
+                max_duration: std::time::Duration::from_secs(self.max_duration_secs),
+            },
+        }
+    }
+}
+
 impl AppConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
@@ -496,6 +560,16 @@ impl AppConfig {
         self.risk.validate()?;
         self.server.validate()?;
         self.chain.validate()?;
+        for w in &self.wallets {
+            w.validate()?;
+        }
+        {
+            let mut names: Vec<&str> = self.wallets.iter().map(|w| w.name.as_str()).collect();
+            names.sort_unstable();
+            if names.windows(2).any(|pair| pair[0] == pair[1]) {
+                bail!("duplicate wallet name in [[wallets]]");
+            }
+        }
 
         if !self.copytrade.leaders.is_empty() {
             if let Some(f) = self.copytrade.fixed_fraction {
@@ -551,6 +625,7 @@ mod tests {
             server: ServerSection::default(),
             hook: HookSection::default(),
             chain: ChainSection::default(),
+            wallets: Vec::new(),
         }
     }
 

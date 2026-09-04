@@ -73,6 +73,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   — PowerShell's `Get-Content x | sherwood secrets set` writes one, which silently corrupted
   every secret stored that way (caught by the first `wallet-address` smoke test: a
   clean 64-hex-char key failed to parse as "odd number of digits" until this fix).
+- **`sherwood-wallets` — multi-wallet registry (v0.2.3).** New crate: a named `Wallet` wraps a
+  `sherwood-signer` key with a symbol allowlist (`allows_symbol`, case-insensitive, empty =
+  unrestricted) and a per-wallet spend ceiling (`WalletBudget` — tx count / cumulative
+  notional / duration, the same hard-stop-and-latch shape as `sherwood-server`'s per-session
+  budget). `WalletRegistry::load` resolves every `key_ref` (a `vault:NAME` reference) against
+  the vault and is all-or-nothing — a missing secret, duplicate name, or bad key fails the
+  whole load rather than silently dropping a wallet. New `[[wallets]]` config array and
+  `sherwood wallets <config.toml>` CLI (prints name / address / allowlist / budget — never a
+  key). Same boundary as `sherwood-signer`: no RPC client, no broadcast method; nothing yet
+  calls `wallet_for_symbol` to actually pick a wallet for an order — that's `sherwood-dex`.
+  14 unit tests.
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**

@@ -17,6 +17,7 @@ mod runner;
 mod secrets_cmd;
 mod serve_cmd;
 mod wallet_cmd;
+mod wallets_cmd;
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -37,7 +38,8 @@ fn usage() -> ! {
          sherwood secrets <cmd>        manage the encrypted secret vault\n  \
          sherwood chain-probe [rpc-url] [token ...]  read-only Robinhood Chain transfer pre-flight\n  \
          sherwood chain-price [rpc-url] [token] [denom]  read a live Stock Token price off-chain\n  \
-         sherwood wallet-address <secret-name>  derive + print a wallet address from a vault key\n"
+         sherwood wallet-address <secret-name>  derive + print a wallet address from a vault key\n  \
+         sherwood wallets <config.toml>  load [[wallets]] and print name/address/budget per wallet\n"
     );
     std::process::exit(2);
 }
@@ -125,6 +127,11 @@ async fn main() -> Result<()> {
                 cfg.risk.allowlist.len()
             );
             Ok(())
+        }
+        Some("wallets") => {
+            let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let cfg = config::AppConfig::load(&path)?;
+            wallets_cmd::run(&cfg)
         }
         Some("backup") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();

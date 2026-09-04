@@ -1928,6 +1928,7 @@ dependencies = [
  "sherwood-signer",
  "sherwood-sniper",
  "sherwood-store",
+ "sherwood-wallets",
  "tempfile",
  "tokio",
  "toml",
@@ -2096,6 +2097,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sherwood-wallets"
+version = "0.1.0"
+dependencies = [
+ "rust_decimal",
+ "rust_decimal_macros",
+ "sherwood-secrets",
+ "sherwood-signer",
+ "thiserror",
 ]
 
 [[package]]

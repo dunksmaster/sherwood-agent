@@ -155,6 +155,7 @@ mod tests {
             server: Default::default(),
             hook: Default::default(),
             chain: Default::default(),
+            wallets: Vec::new(),
         }
     }
 
