@@ -1,17 +1,18 @@
 //! `sherwood-server` — the local control-plane HTTP API.
 //!
-//! Bound to loopback, one bearer token (constant-time compared), one error
-//! envelope. This is the S9 skeleton: liveness plus the `PreToolUse` order
-//! hook (S7) wired to a real route. RBAC roles, the PAPER/LIVE toggle, the
-//! kill-switch endpoint, the WebSocket event feed, `/metrics`, generated
-//! OpenAPI, and rate limiting are the S9b / S9c increments.
+//! Bound to loopback, bearer-token auth with three RBAC roles
+//! (`viewer` / `operator` / `admin`), one error envelope. S9a shipped the
+//! skeleton and the `PreToolUse` order hook; S9b (this) adds the roles, the
+//! PAPER/LIVE toggle, and the kill-switch endpoint. The WebSocket event feed,
+//! `/metrics`, generated OpenAPI, and rate limiting are S9c.
 //!
-//! Routes:
-//!
-//! | Method | Path | Auth | Notes |
+//! | Method | Path | Min role | Notes |
 //! |---|---|---|---|
-//! | GET  | `/v1/health` | none | liveness + mode + uptime |
-//! | POST | `/v1/hook/pretooluse` | bearer | allow / deny one agent tool call |
+//! | GET  | `/v1/health` | none | liveness, mode, kill-switch, uptime |
+//! | GET  | `/v1/control` | viewer | current mode + kill-switch |
+//! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
+//! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
+//! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -28,13 +29,17 @@ use axum::Router;
 use std::future::Future;
 use std::net::SocketAddr;
 
-/// Build the router. `/v1/health` is open; everything else requires the token.
+/// Build the router. `/v1/health` is open; every other route runs behind
+/// [`auth::require_auth`] and then checks its own minimum role.
 pub fn router(state: AppState) -> Router {
     let protected = Router::new()
+        .route("/v1/control", get(routes::get_control))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
+        .route("/v1/mode", post(routes::post_mode))
+        .route("/v1/kill", post(routes::post_kill))
         .route_layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            auth::require_token,
+            auth::require_auth,
         ));
 
     Router::new()
@@ -59,7 +64,7 @@ where
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let bound = listener.local_addr()?;
-    tracing::info!(%bound, mode = state.mode.as_str(), "sherwood-server listening");
+    tracing::info!(%bound, "sherwood-server listening");
 
     axum::serve(listener, router(state))
         .with_graceful_shutdown(shutdown)
@@ -87,6 +92,9 @@ mod tests {
     use sherwood_execution::{ToolAllowlist, ToolClass};
     use tower::ServiceExt;
 
+    const ADMIN: &str = "admin-token";
+    const OPERATOR: &str = "operator-token";
+
     fn test_state() -> AppState {
         let allowlist = ToolAllowlist::from_pairs([
             ("get_positions", ToolClass::ReadOnly),
@@ -97,7 +105,20 @@ mod tests {
             max_position_fraction: dec!(1),
             ..RiskConfig::default()
         });
-        AppState::new(auth::ApiToken::from_value("test-token"), risk, allowlist)
+        let tokens = auth::TokenSet::new(
+            auth::ApiToken::from_value(ADMIN),
+            Some(auth::ApiToken::from_value(OPERATOR)),
+            None,
+        );
+        AppState::new(tokens, risk, allowlist, /* allow_live */ false)
+    }
+
+    fn allow_live_state() -> AppState {
+        let s = test_state();
+        AppState {
+            allow_live: true,
+            ..s
+        }
     }
 
     fn ctx_json() -> serde_json::Value {
@@ -114,106 +135,165 @@ mod tests {
         String::from_utf8(bytes.to_vec()).unwrap()
     }
 
+    fn post(path: &str, token: Option<&str>, json: serde_json::Value) -> Request<Body> {
+        let mut b = Request::post(path).header("content-type", "application/json");
+        if let Some(t) = token {
+            b = b.header("authorization", format!("Bearer {t}"));
+        }
+        b.body(Body::from(json.to_string())).unwrap()
+    }
+
+    async fn call(state: AppState, req: Request<Body>) -> axum::response::Response {
+        router(state).oneshot(req).await.unwrap()
+    }
+
     #[tokio::test]
-    async fn health_needs_no_auth() {
-        let resp = router(test_state())
-            .oneshot(Request::get("/v1/health").body(Body::empty()).unwrap())
-            .await
-            .unwrap();
+    async fn health_needs_no_auth_and_shows_kill_switch() {
+        let resp = call(
+            test_state(),
+            Request::get("/v1/health").body(Body::empty()).unwrap(),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::OK);
-        assert!(body_string(resp).await.contains("\"mode\":\"paper\""));
-    }
-
-    #[tokio::test]
-    async fn hook_route_rejects_a_missing_token() {
-        let resp = router(test_state())
-            .oneshot(
-                Request::post("/v1/hook/pretooluse")
-                    .header("content-type", "application/json")
-                    .body(Body::from("{}"))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         let b = body_string(resp).await;
-        assert!(b.contains("\"code\":\"unauthorized\""));
-        assert!(b.contains("correlation_id"));
+        assert!(b.contains("\"mode\":\"paper\""));
+        assert!(b.contains("\"kill_switch\":false"));
     }
 
     #[tokio::test]
-    async fn hook_route_rejects_a_wrong_token() {
-        let resp = router(test_state())
-            .oneshot(
-                Request::post("/v1/hook/pretooluse")
-                    .header("authorization", "Bearer nope")
-                    .header("content-type", "application/json")
-                    .body(Body::from("{}"))
-                    .unwrap(),
+    async fn hook_rejects_missing_and_wrong_tokens() {
+        for tok in [None, Some("nope")] {
+            let resp = call(
+                test_state(),
+                post("/v1/hook/pretooluse", tok, serde_json::json!({})),
             )
-            .await
-            .unwrap();
-        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+            .await;
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
     }
 
     #[tokio::test]
-    async fn hook_route_allows_a_clean_order_with_a_valid_token() {
-        let req_body = serde_json::json!({
-            "tool_call": {
-                "name": "place_order",
-                "arguments": { "symbol": "ROAR", "side": "buy", "quantity": "1", "limit_price": "100" }
-            },
+    async fn operator_can_use_the_hook_but_not_the_toggles() {
+        let body = serde_json::json!({
+            "tool_call": { "name": "place_order",
+                "arguments": { "symbol": "ROAR", "side": "buy", "quantity": "1", "limit_price": "100" } },
             "context": ctx_json()
         });
-        let resp = router(test_state())
-            .oneshot(
-                Request::post("/v1/hook/pretooluse")
-                    .header("authorization", "Bearer test-token")
-                    .header("content-type", "application/json")
-                    .body(Body::from(req_body.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let resp = call(
+            test_state(),
+            post("/v1/hook/pretooluse", Some(OPERATOR), body),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert_eq!(body_string(resp).await, r#"{"decision":"allow"}"#);
+
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/kill",
+                Some(OPERATOR),
+                serde_json::json!({ "engage": true, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]
-    async fn hook_route_denies_an_unlisted_tool_with_200() {
-        let req_body = serde_json::json!({
+    async fn a_denied_tool_call_is_200_not_an_error() {
+        let body = serde_json::json!({
             "tool_call": { "name": "wire_transfer", "arguments": {} },
             "context": ctx_json()
         });
-        let resp = router(test_state())
-            .oneshot(
-                Request::post("/v1/hook/pretooluse")
-                    .header("authorization", "Bearer test-token")
-                    .header("content-type", "application/json")
-                    .body(Body::from(req_body.to_string()))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-        // A denied tool call is a successful evaluation, not an HTTP error.
+        let resp = call(
+            test_state(),
+            post("/v1/hook/pretooluse", Some(OPERATOR), body),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains(r#""decision":"deny""#));
     }
 
     #[tokio::test]
-    async fn hook_route_400s_a_malformed_body_through_the_envelope() {
-        let resp = router(test_state())
-            .oneshot(
-                Request::post("/v1/hook/pretooluse")
-                    .header("authorization", "Bearer test-token")
-                    .header("content-type", "application/json")
-                    .body(Body::from(r#"{"tool_call": {"name": "x"}}"#)) // no context
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+    async fn malformed_hook_body_is_400_through_the_envelope() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/hook/pretooluse",
+                Some(OPERATOR),
+                serde_json::json!({ "tool_call": { "name": "x" } }),
+            ),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
         assert!(body_string(resp).await.contains("\"code\":\"bad_request\""));
+    }
+
+    #[tokio::test]
+    async fn kill_switch_engaged_then_the_hook_denies_orders() {
+        let state = test_state();
+
+        let resp = call(
+            state.clone(),
+            post(
+                "/v1/kill",
+                Some(ADMIN),
+                serde_json::json!({ "engage": true, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"kill_switch\":true"));
+
+        let body = serde_json::json!({
+            "tool_call": { "name": "place_order",
+                "arguments": { "symbol": "ROAR", "side": "buy", "quantity": "1", "limit_price": "100" } },
+            "context": ctx_json()
+        });
+        let resp = call(state, post("/v1/hook/pretooluse", Some(ADMIN), body)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("kill switch"));
+    }
+
+    #[tokio::test]
+    async fn kill_requires_body_reauth_with_the_admin_token() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/kill",
+                Some(ADMIN),
+                serde_json::json!({ "engage": true, "reauth": "wrong" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert!(body_string(resp).await.contains("re-authentication failed"));
+    }
+
+    #[tokio::test]
+    async fn mode_toggle_to_live_is_refused_unless_allowed_in_config() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/mode",
+                Some(ADMIN),
+                serde_json::json!({ "mode": "live", "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        let resp = call(
+            allow_live_state(),
+            post(
+                "/v1/mode",
+                Some(ADMIN),
+                serde_json::json!({ "mode": "live", "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"mode\":\"live\""));
     }
 
     #[tokio::test]

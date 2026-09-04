@@ -94,15 +94,19 @@ requires the admin role and is audited. Recovery procedure lives in
 
 ## Local API
 
-- Binds `127.0.0.1` by default. Any other bind requires TLS and is refused otherwise.
-- Bearer token, generated on first run, stored in the keyring, compared in constant time.
-- RBAC — `viewer` (read), `operator` (approve, deny), `admin` (config, live toggle, kill
-  switch). Wired from S9 even though v0.1 has one user, so that adding users later is not a
-  redesign.
-- The live toggle and the kill switch require the admin role **and** re-authentication.
+- Binds `127.0.0.1` by default. Any other bind is **refused** (a non-loopback bind needs TLS,
+  which is a later concern). *Done (S9a).*
+- Bearer token, generated on first `serve` into the `sherwood-secrets` vault (an OS-keyring
+  backend is the deferred S6.3 option), compared in constant time (`subtle`). *Done (S9a).*
+- RBAC — `viewer` (read), `operator` (the `PreToolUse` hook), `admin` (mode toggle, kill
+  switch). The role is whichever configured token authenticated; each route declares its
+  minimum. Wired even though v0.1 usually runs admin-only, so adding tokens later is not a
+  redesign. *Done (S9b).*
+- The live toggle and the kill switch require the admin role **and** the admin token again in
+  the request body. LIVE is additionally gated by `[server] allow_live`. *Done (S9b).*
 - CORS restricted to the local origin. Strict CSP on the frontend. No external script or
-  style origins.
-- Rate limiting per IP and per token, on both REST and WebSocket upgrade.
+  style origins. *Pending (S9c / S10).*
+- Rate limiting per IP and per token, on both REST and WebSocket upgrade. *Pending (S9c).*
 
 ## The approval hook
 

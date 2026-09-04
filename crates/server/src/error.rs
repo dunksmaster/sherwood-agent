@@ -15,6 +15,9 @@ pub type CorrelationId = String;
 pub enum ApiError {
     #[error("missing or malformed Authorization header")]
     Unauthorized,
+    /// Authenticated, but the role is insufficient (or re-auth failed).
+    #[error("{0}")]
+    Forbidden(String),
     /// The request was syntactically wrong (bad JSON, missing field).
     #[error("{0}")]
     BadRequest(String),
@@ -31,6 +34,10 @@ impl ApiError {
         Self::BadRequest(msg.into())
     }
 
+    pub fn forbidden(msg: impl Into<String>) -> Self {
+        Self::Forbidden(msg.into())
+    }
+
     pub fn unprocessable(msg: impl Into<String>) -> Self {
         Self::Unprocessable(msg.into())
     }
@@ -42,6 +49,7 @@ impl ApiError {
     fn status(&self) -> StatusCode {
         match self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
             Self::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -51,6 +59,7 @@ impl ApiError {
     fn code(&self) -> &'static str {
         match self {
             Self::Unauthorized => "unauthorized",
+            Self::Forbidden(_) => "forbidden",
             Self::BadRequest(_) => "bad_request",
             Self::Unprocessable(_) => "unprocessable_entity",
             Self::Internal(_) => "internal",

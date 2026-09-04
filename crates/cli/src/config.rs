@@ -270,9 +270,16 @@ pub struct ServerSection {
     /// `ip:port` to bind. Loopback only — a public bind needs TLS and is
     /// refused (see `docs/SECURITY.md`).
     pub bind: String,
-    /// Where the bearer token lives. A `vault:` reference; the token is
-    /// generated into the vault on first `serve` if absent.
+    /// Where the admin bearer token lives. A `vault:` reference; generated into
+    /// the vault on first `serve` if absent.
     pub token_ref: String,
+    /// Optional `operator`-role token reference. Absent = no operator token.
+    pub operator_token_ref: Option<String>,
+    /// Optional `viewer`-role token reference. Absent = no viewer token.
+    pub viewer_token_ref: Option<String>,
+    /// Whether an admin may switch the mode to LIVE at runtime. The bundled
+    /// runner is paper-only regardless; this just gates the toggle.
+    pub allow_live: bool,
 }
 
 impl Default for ServerSection {
@@ -280,6 +287,9 @@ impl Default for ServerSection {
         Self {
             bind: "127.0.0.1:8787".into(),
             token_ref: "vault:api_token".into(),
+            operator_token_ref: None,
+            viewer_token_ref: None,
+            allow_live: false,
         }
     }
 }
@@ -293,8 +303,19 @@ impl ServerSection {
         if !addr.ip().is_loopback() {
             bail!("server.bind {addr} is not loopback; a public bind needs TLS and is refused");
         }
-        if !self.token_ref.starts_with("vault:") {
-            bail!("server.token_ref must be a vault reference like \"vault:api_token\"");
+        for (name, r) in [
+            ("server.token_ref", Some(&self.token_ref)),
+            (
+                "server.operator_token_ref",
+                self.operator_token_ref.as_ref(),
+            ),
+            ("server.viewer_token_ref", self.viewer_token_ref.as_ref()),
+        ] {
+            if let Some(r) = r {
+                if !r.starts_with("vault:") {
+                    bail!("{name} must be a vault reference like \"vault:api_token\"");
+                }
+            }
         }
         Ok(())
     }
@@ -475,6 +496,16 @@ mod tests {
         let mut c = base();
         c.server.bind = "not-an-addr".into();
         assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn role_token_refs_must_be_vault_references() {
+        let mut c = base();
+        c.server.operator_token_ref = Some("literal-token".into());
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("vault reference"), "{err}");
+        c.server.operator_token_ref = Some("vault:api_token_operator".into());
+        assert!(c.validate().is_ok());
     }
 
     #[test]

@@ -1,14 +1,16 @@
 //! Shared, cheaply-cloneable handler state.
 
-use crate::auth::ApiToken;
+use crate::auth::TokenSet;
 use chrono::{DateTime, Utc};
 use sherwood_core::RiskGate;
 use sherwood_execution::ToolAllowlist;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
-/// Trading mode. Only [`Mode::Paper`] is reachable in v0.1; the LIVE toggle and
-/// its `admin` + re-auth gate arrive with S9b.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+/// Trading mode. `Live` is reachable only when `[server] allow_live = true` and
+/// an admin toggles it with re-auth; the bundled runner is still paper-only, so
+/// in v0.1 the flag is visible but has no execution path behind it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     Paper,
@@ -24,25 +26,45 @@ impl Mode {
     }
 }
 
+/// The parts of the server that change at runtime. Held behind one `RwLock` so
+/// the mode toggle and the kill switch are a single, consistent write.
+pub struct Control {
+    pub mode: Mode,
+    pub risk: RiskGate,
+}
+
+impl Control {
+    pub fn kill_switch(&self) -> bool {
+        self.risk.config().kill_switch
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
-    pub token: Arc<ApiToken>,
-    /// The risk config the `PreToolUse` hook checks orders against. `Arc` for
-    /// now; S9b makes this swappable for the LIVE toggle and kill switch.
-    pub risk: Arc<RiskGate>,
+    pub tokens: Arc<TokenSet>,
     /// Which agent MCP tools may be called, and how each is classified.
     pub allowlist: Arc<ToolAllowlist>,
-    pub mode: Mode,
+    pub control: Arc<RwLock<Control>>,
+    /// Whether an admin is allowed to switch the mode to `Live` at all.
+    pub allow_live: bool,
     pub started_at: DateTime<Utc>,
 }
 
 impl AppState {
-    pub fn new(token: ApiToken, risk: RiskGate, allowlist: ToolAllowlist) -> Self {
+    pub fn new(
+        tokens: TokenSet,
+        risk: RiskGate,
+        allowlist: ToolAllowlist,
+        allow_live: bool,
+    ) -> Self {
         Self {
-            token: Arc::new(token),
-            risk: Arc::new(risk),
+            tokens: Arc::new(tokens),
             allowlist: Arc::new(allowlist),
-            mode: Mode::Paper,
+            control: Arc::new(RwLock::new(Control {
+                mode: Mode::Paper,
+                risk,
+            })),
+            allow_live,
             started_at: Utc::now(),
         }
     }
