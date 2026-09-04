@@ -132,13 +132,13 @@ from `GRADE-TARGET.md`.
 | S5.4 | `RiskGate` extension: unrealized-loss breaker, max open positions, per-symbol cooldown, via `GateContext` | `core` | done |
 | S5.5 | Kill switch wired — bus event plus gate check | `core`, `cli` | partial — gate check done; a runtime toggle needs the server (S9) |
 | S5.6 | Graceful shutdown — SIGINT, stop cleanly, snapshot on exit | `cli` | done (Pre-S0 + S1) |
-| S5.7 | Deterministic harness — injected `Clock` (done), seeded RNG (pending), `proptest` on gate arithmetic (pending) | `core`, `cli` | partial |
+| S5.7 | Deterministic harness — injected `Clock` (done); **`proptest` on the risk gate** (done — 5 properties: totality + determinism, kill-switch dominance, accepted-order-within-notional/slippage, accepted-buy-within-position-fraction, de-risking-sell-always-passes); seeded RNG N/A (the paper path uses no randomness) | `core` | done |
 
 **Exit criteria — met:** `sherwood run` with a `feed_path` CSV replays a two-symbol paper
 run, persists the portfolio + fills + a verifying audit chain, and resumes from the last
 snapshot on the next run. With `decider = "ai"` the same loop is driven by an
 OpenAI-compatible model, API key from the vault, every proposal still passing `RiskGate`.
-Still open within S4–S5: a seeded RNG and `proptest` on the gate arithmetic.
+S4–S5 are complete.
 
 ## S6 — secrets vault
 

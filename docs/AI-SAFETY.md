@@ -171,5 +171,9 @@ See [THREAT-MODEL.md](THREAT-MODEL.md#model--and-agent-specific-threats).
 - Golden tests: known-good and known-bad model responses through the parser.
 - An injection corpus — prompts containing instruction-shaped content in every untrusted
   field — asserting the outcome is always `Hold` or a flagged rejection, never an order.
-- Property test: no model output, however malformed, produces an order that violates a cap.
-- Budget exhaustion and timeout paths exercised deterministically with a mock provider.
+- **Property test (`sherwood-core`, done):** across a wide space of configs, orders, and
+  portfolio states, `RiskGate::check` never panics, is deterministic, and never returns
+  `Ok` for an order that exceeds a cap that applies to it — so no decider output, however
+  malformed, can produce a gate pass that breaks a limit.
+- Budget exhaustion and timeout paths exercised deterministically with a mock provider (done
+  — `sherwood-decision` tests).

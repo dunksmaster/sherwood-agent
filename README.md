@@ -159,7 +159,8 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**v0.1 (paper) — feature complete.** 163 Rust tests pass, the dashboard builds, CI is green,
+**v0.1 (paper) — feature complete.** 168 Rust tests (unit + `proptest` on the risk gate)
+pass, the dashboard builds, CI is green,
 and the [threat model is signed off](docs/THREAT-MODEL.md#sign-off). Cutting the `v0.1.0`
 tag is the operator's call — see [RELEASE-NOTES-0.1.0.md](docs/RELEASE-NOTES-0.1.0.md). There
 is **no live-venue path** in v0.1; the Robinhood MCP adapter and everything downstream of it
