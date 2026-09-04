@@ -21,3 +21,9 @@ keypair*.json
 
 # sqlx local dev database (the committed .sqlx/ offline cache is what CI uses)
 crates/store/.sqlx-dev.db*
+
+# frontend (package-lock.json IS committed — CI uses npm ci)
+frontend/node_modules
+frontend/dist
+frontend/*.tsbuildinfo
+frontend/.vite

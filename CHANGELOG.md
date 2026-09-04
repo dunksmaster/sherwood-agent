@@ -9,6 +9,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Dashboard (S10)** — `frontend/`: a React + Vite + TypeScript control panel for
+  `sherwood-server`. Token login held in `sessionStorage` (this tab only, never on disk),
+  dropped on any `401`. Status bar with the always-visible PAPER / **LIVE** badge (live is
+  red and pulses) and kill-switch indicator; portfolio card (cash, realized P&L, positions);
+  activity list with a chain-integrity badge from `GET /v1/audit/verify`; admin controls for
+  the kill switch and the PAPER/LIVE toggle, each re-prompting for the admin token. No UI
+  framework — one stylesheet in the shadcn idiom. Strict CSP injected at build time. New CI
+  job runs `npm ci` · lint · typecheck · build. See
+  [docs/FRONTEND-ARCH.md](docs/FRONTEND-ARCH.md).
 - **Read-only state views on the server (S11a)** — `sherwood serve` opens the same
   `[general] state_path` database `sherwood run` writes, and exposes it: `GET /v1/portfolio`
   (cash, realized P&L, open positions), `GET /v1/activity?limit=N` (recent audit-chain

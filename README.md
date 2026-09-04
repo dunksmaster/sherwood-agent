@@ -90,6 +90,7 @@ sherwood-agent/
 │   ├── copytrade/    library scaffold — deferred to v0.2
 │   ├── sniper/       library scaffold — deferred to v0.2
 │   └── cli/          the `sherwood` binary
+├── frontend/         React + Vite + TS control-plane dashboard
 ├── .sqlx/            committed sqlx offline query cache (CI uses this)
 ├── docs/             the plan, standards, security, ADRs — start at docs/README.md
 ├── feeds/            sample CSV price feeds for `sherwood run --feed_path`
@@ -149,7 +150,7 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**Early build.** 120 tests pass and CI is green. The plan, the standards, the threat model,
+**Early build.** 136 Rust tests pass, the dashboard builds, and CI is green. The plan, the standards, the threat model,
 and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance deliverable.
 
 - **Done (S0–S6):** the S0 doc set; a tested `core` with `RiskGate` and `Portfolio`; a
@@ -157,13 +158,15 @@ and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance
   output, injection guard, fallback-to-Hold); SQLite persistence with a hash-chained audit
   log; an internal event bus; a multi-asset paper loop over a CSV feed; an encrypted secrets
   vault.
-- **Done (S7 core, S9a):** the fail-closed `PreToolUse` hook decision core
-  ([ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3) — tool allowlist, strict
-  order parsing, every path denies unless clean; and the `sherwood-server` skeleton
-  (`sherwood serve`) exposing `/v1/health` and the hook route on loopback with bearer auth.
-- **Next:** RBAC + the PAPER/LIVE toggle + kill-switch endpoint (S9b), then the WebSocket
-  feed and metrics (S9c), then the dashboard (S10).
-- **Not started:** the dashboard, the approval gate, the scheduler, a backtest harness.
+- **Done (S7 core, S9, S11a):** the fail-closed `PreToolUse` hook decision core
+  ([ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3); `sherwood-server` on
+  loopback — bearer auth, 3 RBAC roles, error envelope, kill switch, PAPER/LIVE toggle,
+  `/v1/metrics`, rate limit, and read-only portfolio / activity / audit-verify views.
+- **Done (S10):** the `frontend/` dashboard — token login, PAPER/**LIVE** badge, portfolio +
+  activity views, admin kill-switch and mode toggle.
+- **Next:** fold the run loop into `serve` + a WebSocket event feed + generated OpenAPI (S9d),
+  then the approval gate (S11) and scheduler (S12).
+- **Not started:** the approval gate, the scheduler, a backtest harness.
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
 code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
