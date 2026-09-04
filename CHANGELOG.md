@@ -9,6 +9,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`PreToolUse` hook script (S7.2b)** — [`scripts/pretooluse-hook.mjs`](scripts/README.md),
+  the bridge for [ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3. A headless
+  `claude` / `codex` agent runs it before every tool call; it reads the tool-call event on
+  stdin, `POST`s it to `sherwood-server`'s `/v1/hook/pretooluse`, and maps the allow/deny
+  answer onto the agent CLI's permission schema. Fails closed on any error, timeout, or
+  non-allow. Node ≥ 18, no dependencies. `SHERWOOD_HOOK_CONTEXT` supplies the account/market
+  picture the gate checks against (required for buys — otherwise a zero-cash portfolio is
+  sent and buys are denied). `--dry-run` prints the request without sending it. The
+  script → server → gate → decision chain is tested end-to-end against a local
+  `sherwood serve`; driving it from a real agent + Robinhood MCP is the first S7 task once a
+  connection exists.
 - **`proptest` on the risk gate (S5.7)** — 5 properties over a wide space of configs, orders,
   and portfolio states: `RiskGate::check` never panics and is deterministic; the kill switch
   dominates every other outcome; an accepted order (buy or sell) is always within the

@@ -126,8 +126,14 @@ venue. It is treated as security-critical:
   cancel-order. Only place-order calls are parsed and risk-checked; a cancel is allowed even
   under a hard stop, since it can only reduce exposure.
 - Authenticated with the local token; an unauthenticated hook call is denied and alerted.
-- Its own timeout must exceed the approval timeout, and the agent's hook timeout must exceed
-  both, or a slow human approval is silently converted into a denial. The approval gate
+- The client side is [`scripts/pretooluse-hook.mjs`](../scripts/README.md): it forwards the
+  agent's tool call to `POST /v1/hook/pretooluse` with an `operator`-role bearer token and
+  maps the `{decision}` answer onto the CLI's permission schema, exiting non-zero on deny.
+  Any transport error, timeout, non-`2xx`, unparseable response, or non-`allow` decision
+  results in a deny.
+- `SHERWOOD_HOOK_TIMEOUT_MS` (script) must exceed `[server] approval_timeout_secs` × 1000,
+  and the agent CLI's own hook timeout must exceed that, or a slow-but-valid approval is
+  silently converted into a denial. The approval gate
   ([ADR-0005](adr/0005-approval-gate.md)) is implemented: in `manual` mode a risk-passing
   order is held until the operator approves it, denies it, or `[server]
   approval_timeout_secs` elapses (auto-deny). A server restart denies anything pending.
