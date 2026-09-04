@@ -9,6 +9,11 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood-secrets` (S6)** — a `FileVault`: Argon2id-derived key, XChaCha20-Poly1305 over a
+  JSON `name → value` map, passphrase from `$SHERWOOD_VAULT_PASSPHRASE` (`0600` on Unix).
+  `SecretString` zeroes on drop and prints `[redacted]`; `resolve_ref` turns `vault:NAME`
+  config references into values. New `sherwood secrets set|get|list|rm` — `set` reads from
+  stdin, not argv. 7 tests incl. wrong-passphrase and tamper detection.
 - **Multi-asset paper loop + CSV feed (S5.1–5.2)** — `PriceFeed` trait + `Tick` in `core`;
   `CsvFeed` (replays `timestamp,symbol,price` rows) and `SliceFeed` in the CLI. The run loop
   is now driven by a feed, one symbol per tick, with equity and unrealized P&L marked

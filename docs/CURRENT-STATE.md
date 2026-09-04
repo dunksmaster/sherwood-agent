@@ -16,6 +16,7 @@ and was verified against the source.
 |---|---|---|
 | `sherwood-core` | Domain types; `Portfolio` (serde, avg-cost, realized + **unrealized P&L**, `open_position_count`); `RiskGate` (hard stops + entry limits via `GateContext`); injected `Clock`; **`PriceFeed` trait + `Tick`**. 16 unit tests. | `proptest` on the gate arithmetic (S5.7); a `RiskGate` reset path after a breaker fires |
 | `sherwood-store` | `Store` trait; `SqliteStore` (`sqlx`, compile-time-checked queries, embedded migrations): portfolio snapshots, fill history, **hash-chained tamper-evident audit log** with `verify_audit_chain`. `StoreSubscriber` persists straight from the event bus. 8 unit tests incl. kill-and-restart and tamper detection. | `config_state` / `cursors` / `pending_approvals` tables (added at S2 / S5 / S11); external anchoring of the chain head |
+| `sherwood-secrets` | Encrypted file vault: Argon2id key + XChaCha20-Poly1305 over a JSON `name → value` map; passphrase from `$SHERWOOD_VAULT_PASSPHRASE`; `SecretString` zeroes on drop and prints `[redacted]`; `resolve_ref` turns `vault:NAME` config refs into values. `sherwood secrets set/get/list/rm`. 7 tests incl. wrong-passphrase and tamper detection. | OS keyring backend (behind a feature, when wanted); rotation tooling |
 | `sherwood-events` | Internal bus (`tokio::sync::broadcast`, bounded 1000). `Event` (4 variants, each with a real emitter and consumer), versioned `Envelope`, `Subscriber` trait + `run_subscriber`, `TracingSubscriber`. A slow or failing subscriber is logged, never fatal. 4 unit tests. | Metrics / notification subscribers (S13); supervisor (S3.4–3.5) |
 | `sherwood-execution` | `Executor` trait, deterministic `PaperExecutor` (spread + fee + slippage guard), `LiveExecutor` that always errors. 3 unit tests. | Retry, circuit breaker, order lifecycle beyond a synchronous `Fill` |
 | `sherwood-decision` | `Decider` trait, `RuleDecider` (momentum entry, take-profit, stop-loss, liquidity floor), `AiDecider` wrapping a caller-supplied async closure. 5 unit tests. | No provider client, no prompt, no output schema — **by design**, the closure is the seam |
@@ -23,7 +24,7 @@ and was verified against the source.
 | `sherwood-sniper` | `NewPoolEvent`, `RugScreen` with 7 safety checks, entry-order builder. 4 unit tests. | No pool event source. **Not wired into the runner.** Deferred to v0.2 |
 | `sherwood-cli` | `demo` / `run` / `check`; validated TOML config; paper-only guard; clean Ctrl-C. **Multi-asset run loop** driven by a `PriceFeed` — the built-in two-symbol demo feed, or a **CSV replay** (`feed_path`). Publishes events onto the bus; a tracing subscriber logs them and (with `state_path`) a store subscriber persists them and the loop resumes from the last snapshot. 15 tests. | Live feed (v0.2); copy-trade and sniper config not wired; naive `change_24h` (previous tick, not a real window) |
 
-60 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
+67 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
 `cargo deny check` (licences + RustSec advisories + bans + sources) are all clean. CI runs
 those plus an MSRV 1.80 build, a CycloneDX SBOM, `gitleaks`, a coverage report, and a
 doc-link check. `sqlx` queries are compile-time-checked against the committed `.sqlx/`
