@@ -1635,6 +1635,8 @@ dependencies = [
  "chrono",
  "rust_decimal",
  "rust_decimal_macros",
+ "serde",
+ "serde_json",
  "sherwood-core",
  "thiserror",
  "tokio",

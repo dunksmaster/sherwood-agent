@@ -10,8 +10,21 @@
 //!   router (for example the Robinhood Agentic Trading MCP) is left to the
 //!   operator: you implement the adapter, you accept the agreements, you hold
 //!   the keys. See `docs/LIVE_EXECUTION.md`.
+//!
+//! [`hook`] is the other side of live trading under [ADR-0001] Option 3: the
+//! fail-closed `PreToolUse` gate that stands between a headless trading agent
+//! and the Robinhood MCP. It needs no venue adapter — it inspects the agent's
+//! tool calls and answers allow / deny.
+//!
+//! [ADR-0001]: ../../../docs/adr/0001-mcp-interaction-model.md
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
+pub mod hook;
+pub mod order_parse;
+
+pub use hook::{HookGate, HookOutcome, ToolAllowlist, ToolCall, ToolClass};
+
 use async_trait::async_trait;
 use chrono::Utc;
 use rust_decimal::Decimal;
