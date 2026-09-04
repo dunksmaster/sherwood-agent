@@ -13,7 +13,7 @@
 
 use crate::config::AppConfig;
 use crate::feed::{CsvFeed, SliceFeed};
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
@@ -21,14 +21,19 @@ use sherwood_core::{
     Asset, Clock, Decision, GateContext, MarketSnapshot, Order, OrderId, Portfolio, PriceFeed,
     RiskGate, Side, SystemClock, Tick, Venue,
 };
-use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
+use sherwood_decision::{
+    AiConfig, AiDecider, AiProvider, Decider, DecisionContext, OpenAiCompatProvider, RuleConfig,
+    RuleDecider,
+};
 use sherwood_events::{run_subscriber, Bus, Event, TracingSubscriber};
 use sherwood_execution::{Executor, PaperExecutor};
+use sherwood_secrets::resolve_ref;
 use sherwood_store::{SqliteStore, Store, StoreSubscriber};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Duration as StdDuration;
 use tokio::task::JoinHandle;
 
 /// A two-symbol synthetic replay so `demo` (and `run` without a `feed_path`) do
@@ -329,12 +334,14 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
 
 pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     tracing::info!(
-        "paper run: starting_cash={} state_path={:?} feed_path={:?}",
+        "paper run: starting_cash={} decider={} state_path={:?} feed_path={:?}",
         cfg.general.starting_cash,
+        cfg.general.decider,
         cfg.general.state_path,
         cfg.general.feed_path,
     );
     let gate = RiskGate::new(cfg.risk.to_core());
+    let decider = build_decider(&cfg)?;
 
     let store = match &cfg.general.state_path {
         Some(path) => Some(Arc::new(open_store(path).await?)),
@@ -356,9 +363,48 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
             store,
             clock: &SystemClock,
         },
-        &RuleDecider::new(RuleConfig::default()),
+        decider.as_ref(),
     )
     .await
+}
+
+/// Build the decider named by `general.decider`. `"rule"` is self-contained;
+/// `"ai"` resolves `ai.api_key` against the vault and wraps an
+/// OpenAI-compatible provider. The config is already validated, so an unknown
+/// name here is unreachable in practice — treated as an error regardless.
+fn build_decider(cfg: &AppConfig) -> Result<Box<dyn Decider>> {
+    match cfg.general.decider.as_str() {
+        "rule" => Ok(Box::new(RuleDecider::new(RuleConfig::default()))),
+        "ai" => {
+            let vault = crate::secrets_cmd::open_vault()
+                .context("opening the vault to resolve ai.api_key")?;
+            let key = resolve_ref(&cfg.ai.api_key, &vault)?
+                .ok_or_else(|| anyhow!("ai.api_key {:?} is not in the vault", cfg.ai.api_key))?;
+            let provider = OpenAiCompatProvider::new(
+                &cfg.ai.base_url,
+                &cfg.ai.model,
+                key.expose(),
+                cfg.ai.temperature as f32,
+                StdDuration::from_secs(cfg.ai.request_timeout_secs),
+            )?;
+            tracing::info!(
+                provider = %provider.describe(),
+                "ai decider enabled — advisory only, paper-only; RiskGate still decides"
+            );
+            let ai_cfg = AiConfig {
+                max_tokens: cfg.ai.max_tokens,
+                max_calls_per_run: cfg.ai.max_calls_per_run,
+                universe: cfg.ai.universe.clone(),
+            };
+            Ok(Box::new(AiDecider::from_provider(
+                Arc::new(provider),
+                ai_cfg,
+            )))
+        }
+        other => Err(anyhow!(
+            "general.decider = {other:?} is not \"rule\" or \"ai\""
+        )),
+    }
 }
 
 async fn open_store(path: &Path) -> Result<SqliteStore> {
@@ -445,12 +491,14 @@ mod tests {
                 mode: "paper".into(),
                 state_path: Some(db.clone()),
                 feed_path: Some(feed),
+                decider: "rule".into(),
             },
             risk: crate::config::RiskSection {
                 max_order_notional: dec!(10_000),
                 max_position_fraction: dec!(0.5),
                 ..crate::config::RiskSection::default()
             },
+            ai: Default::default(),
             copytrade: Default::default(),
             sniper: Default::default(),
         };

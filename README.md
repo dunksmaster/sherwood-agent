@@ -132,7 +132,9 @@ cp config.example.toml config.toml
 cargo run -p sherwood-cli -- check config.toml
 
 # 5. Run against the config (paper only). Set `feed_path` to replay a CSV
-#    (timestamp,symbol,price) and `state_path` to persist + resume.
+#    (timestamp,symbol,price) and `state_path` to persist + resume. Set
+#    `[general] decider = "ai"` (+ the `[ai]` section) to drive it with a
+#    language model instead of the rules — still paper, still gated.
 cargo run -p sherwood-cli -- run config.toml
 ```
 
@@ -142,16 +144,18 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**Planning phase.** The scaffold compiles, 23 tests pass, and CI is green, but most of the
-system is not built. The plan, the standards, the threat model, and the provenance trail now
-live in [`docs/`](docs/README.md) — that was the S0 governance deliverable.
+**Early build.** 82 tests pass and CI is green. The plan, the standards, the threat model,
+and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance deliverable.
 
-- **Done:** the S0 doc set, a tested core with `RiskGate` and `Portfolio`, a deterministic
-  paper executor, a rule-based decider.
-- **Next:** accept [ADR-0001](docs/adr/0001-mcp-interaction-model.md) — how sherwood reaches
-  the Robinhood MCP. Everything in Phase 3 is downstream of that one choice.
-- **Not started:** persistence, event bus, real data feed, the Robinhood adapter, the server,
-  the dashboard. See the roadmap.
+- **Done (S0–S6):** the S0 doc set; a tested `core` with `RiskGate` and `Portfolio`; a
+  deterministic paper executor; a rule decider and a language-model decider (strict-JSON
+  output, injection guard, fallback-to-Hold); SQLite persistence with a hash-chained audit
+  log; an internal event bus; a multi-asset paper loop over a CSV feed; an encrypted secrets
+  vault.
+- **Next:** the Robinhood MCP adapter (S7–S8), downstream of
+  [ADR-0001](docs/adr/0001-mcp-interaction-model.md).
+- **Not started:** the local server, the dashboard, the approval gate, a backtest harness.
+  See the roadmap.
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
 code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).

@@ -113,9 +113,13 @@ from `GRADE-TARGET.md`.
 
 | Step | Task | Crate | Status |
 |---|---|---|---|
-| S4.1 | `Decider` registry — name to factory | `decision` | pending — one real decider so far |
-| S4.2–4.6 | `NvidiaDecider` etc.: OpenAI-compatible client, strict JSON, fallback chain, prompt template | `decision` | pending — needs the secrets vault (S6) for the API key |
-| S4.7 | Shared AI quota manager | `supervisor` | pending |
+| S4.1 | `Decider` selection — `general.decider = "rule" \| "ai"`, built in `cli::runner::build_decider` | `decision`, `cli` | done — a name→factory registry is deferred until a third decider exists |
+| S4.2 | `AiProvider` trait + `AiError`; `OpenAiCompatProvider` (NVIDIA NIM / Groq / local) behind the `openai` feature, `reqwest` rustls, whole-request timeout | `decision` | done |
+| S4.3 | `AiDecider::from_provider` — call budget, one retry, provider error → Hold | `decision` | done |
+| S4.4 | Claude / Groq as distinct providers | `decision` | not needed — both are OpenAI-compatible and covered by `OpenAiCompatProvider` + `base_url`/`model` |
+| S4.5 | Strict JSON output (`deny_unknown_fields`), fence strip, semantic validation, fallback-to-Hold chain | `decision` | done — see [AI-SAFETY.md](AI-SAFETY.md) |
+| S4.6 | Prompt template — `<market_data>` delimited untrusted block, injection guard on the symbol field | `decision` | done |
+| S4.7 | Shared AI quota manager (cross-run) | `supervisor` | deferred — per-run `max_calls_per_run` covers v0.1 |
 | S5.1 | `PriceFeed` trait (`core`) + `CsvFeed` / `SliceFeed` (`cli`) | `core`, `cli` | done |
 | S5.2 | Multi-asset run loop — the feed defines the universe; equity/unrealized mark per held symbol | `cli` | done |
 | S5.3 | End-to-end loop over the event bus: feed → decider → gate → executor → store | `cli` | done (S1 + S3) |
@@ -126,8 +130,9 @@ from `GRADE-TARGET.md`.
 
 **Exit criteria — met:** `sherwood run` with a `feed_path` CSV replays a two-symbol paper
 run, persists the portfolio + fills + a verifying audit chain, and resumes from the last
-snapshot on the next run. Still open within S4–S5: the AI decider (blocked on S6), a seeded
-RNG, and `proptest` on the gate arithmetic.
+snapshot on the next run. With `decider = "ai"` the same loop is driven by an
+OpenAI-compatible model, API key from the vault, every proposal still passing `RiskGate`.
+Still open within S4–S5: a seeded RNG and `proptest` on the gate arithmetic.
 
 ## S6 — secrets vault
 

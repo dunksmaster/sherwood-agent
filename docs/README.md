@@ -45,7 +45,7 @@ recorded rather than forgotten.
 | [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md) | accepted | Lints, MSRV, error handling, determinism, testing, CI gates, process |
 | [SECURITY.md](SECURITY.md) | accepted | Security architecture, credential lifecycle, spend controls, kill switch, reporting |
 | [THREAT-MODEL.md](THREAT-MODEL.md) | draft | STRIDE across the pipeline, including MCP- and AI-specific threats |
-| [AI-SAFETY.md](AI-SAFETY.md) | draft | Prompt injection, output schema enforcement, budgets, decision provenance |
+| [AI-SAFETY.md](AI-SAFETY.md) | partially-implemented | Prompt injection, output schema enforcement, budgets, decision provenance |
 
 ## Legal and provenance
 

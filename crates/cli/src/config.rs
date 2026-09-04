@@ -39,6 +39,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub risk: RiskSection,
     #[serde(default)]
+    pub ai: AiSection,
+    #[serde(default)]
     pub copytrade: CopySection,
     #[serde(default)]
     pub sniper: SniperSection,
@@ -60,6 +62,10 @@ pub struct General {
     /// built-in two-symbol demo feed.
     #[serde(default)]
     pub feed_path: Option<PathBuf>,
+    /// Which decider drives entries: `"rule"` (deterministic thresholds, the
+    /// default) or `"ai"` (a language model via the `[ai]` section). Either way
+    /// the output is advisory — `RiskGate` still has the final say.
+    pub decider: String,
 }
 
 impl Default for General {
@@ -69,7 +75,88 @@ impl Default for General {
             mode: "paper".into(),
             state_path: None,
             feed_path: None,
+            decider: "rule".into(),
         }
+    }
+}
+
+/// The language-model decider. Only consulted when `general.decider = "ai"`.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct AiSection {
+    /// OpenAI-compatible API root, no trailing slash — e.g.
+    /// `https://integrate.api.nvidia.com/v1` (NVIDIA NIM) or a Groq / local
+    /// endpoint.
+    pub base_url: String,
+    /// Model identifier the endpoint expects.
+    pub model: String,
+    /// A vault reference — `"vault:nvidia"`. A literal key here is rejected;
+    /// secrets never live in a config file.
+    pub api_key: String,
+    /// Sampling temperature. Low is appropriate for a decision task.
+    pub temperature: f64,
+    /// `max_tokens` on each completion request.
+    pub max_tokens: u32,
+    /// Stop calling the provider after this many calls in one run (`0` = no
+    /// limit). Once tripped, every decision is `Hold`.
+    pub max_calls_per_run: u32,
+    /// Whole-round-trip timeout for one completion. On expiry the decider holds.
+    pub request_timeout_secs: u64,
+    /// If non-empty, the model may only name these symbols; anything else holds.
+    pub universe: Vec<String>,
+}
+
+impl Default for AiSection {
+    fn default() -> Self {
+        Self {
+            base_url: String::new(),
+            model: String::new(),
+            api_key: String::new(),
+            temperature: 0.2,
+            max_tokens: 300,
+            max_calls_per_run: 50,
+            request_timeout_secs: 20,
+            universe: Vec::new(),
+        }
+    }
+}
+
+impl AiSection {
+    fn validate(&self) -> Result<()> {
+        for (name, v) in [
+            ("ai.base_url", &self.base_url),
+            ("ai.model", &self.model),
+            ("ai.api_key", &self.api_key),
+        ] {
+            if v.trim().is_empty() {
+                bail!("{name} is required when general.decider = \"ai\"");
+            }
+        }
+        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
+            bail!(
+                "ai.base_url must be an http(s) URL — got {:?}",
+                self.base_url
+            );
+        }
+        if !self.api_key.starts_with("vault:") {
+            bail!(
+                "ai.api_key must be a vault reference like \"vault:nvidia\", never a literal \
+                 key — store the key with `sherwood secrets set`"
+            );
+        }
+        require_in_closed(
+            "ai.temperature",
+            Decimal::try_from(self.temperature).unwrap_or(dec!(0)),
+            dec!(0),
+            dec!(2),
+        )?;
+        if self.max_tokens == 0 {
+            bail!("ai.max_tokens must be at least 1");
+        }
+        if self.request_timeout_secs == 0 {
+            bail!("ai.request_timeout_secs must be at least 1");
+        }
+        Ok(())
     }
 }
 
@@ -199,6 +286,12 @@ impl AppConfig {
             Decimal::MAX,
         )?;
 
+        match self.general.decider.as_str() {
+            "rule" => {}
+            "ai" => self.ai.validate()?,
+            other => bail!("general.decider = {other:?} is not \"rule\" or \"ai\""),
+        }
+
         self.risk.validate()?;
 
         if !self.copytrade.leaders.is_empty() {
@@ -249,6 +342,7 @@ mod tests {
         AppConfig {
             general: General::default(),
             risk: RiskSection::default(),
+            ai: AiSection::default(),
             copytrade: CopySection::default(),
             sniper: SniperSection::default(),
         }
@@ -295,6 +389,42 @@ mod tests {
         let mut c = base();
         c.general.mode = "live".into();
         assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_unknown_decider() {
+        let mut c = base();
+        c.general.decider = "magic".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("decider"), "{err}");
+    }
+
+    #[test]
+    fn ai_section_ignored_unless_decider_is_ai() {
+        let mut c = base();
+        c.ai.base_url = "not-a-url".into(); // nonsense, but decider is "rule"
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn ai_decider_requires_a_configured_section() {
+        let mut c = base();
+        c.general.decider = "ai".into();
+        assert!(c.validate().is_err()); // base_url/model/api_key all empty
+    }
+
+    #[test]
+    fn ai_api_key_must_be_a_vault_reference() {
+        let mut c = base();
+        c.general.decider = "ai".into();
+        c.ai.base_url = "https://integrate.api.nvidia.com/v1".into();
+        c.ai.model = "meta/llama-3.1-70b-instruct".into();
+        c.ai.api_key = "nvapi-literal-key".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("vault reference"), "{err}");
+
+        c.ai.api_key = "vault:nvidia".into();
+        assert!(c.validate().is_ok());
     }
 
     #[test]

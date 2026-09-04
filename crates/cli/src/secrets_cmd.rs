@@ -24,11 +24,18 @@ pub fn usage() -> ! {
     std::process::exit(2);
 }
 
-fn open() -> Result<FileVault> {
+/// Open the vault at `$SHERWOOD_VAULT_PATH` (default `./secrets.vault`) using
+/// the passphrase in `$SHERWOOD_VAULT_PASSPHRASE`. Shared with the runner, which
+/// needs it to resolve `vault:` references in the config.
+pub fn open_vault() -> Result<FileVault> {
     let path: PathBuf = std::env::var_os("SHERWOOD_VAULT_PATH")
         .map(PathBuf::from)
         .unwrap_or_else(|| DEFAULT_VAULT.into());
     FileVault::open(path, DEFAULT_PASSPHRASE_ENV).context("opening the vault")
+}
+
+fn open() -> Result<FileVault> {
+    open_vault()
 }
 
 /// `args` is everything after `secrets`.

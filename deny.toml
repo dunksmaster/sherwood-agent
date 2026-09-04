@@ -26,6 +26,10 @@ allow = [
     "Zlib",
     "Unicode-3.0",
     "Unlicense",
+    # webpki-roots (Mozilla CA bundle, pulled in by reqwest/rustls under the
+    # `openai` feature). A permissive data licence — no copyleft, no
+    # binary-attribution burden. See docs/LICENSING.md.
+    "CDLA-Permissive-2.0",
 ]
 confidence-threshold = 0.9
 exceptions = []

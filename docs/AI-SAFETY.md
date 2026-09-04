@@ -1,11 +1,44 @@
 ---
-status: draft
-last-updated: 2026-09-03
+status: partially-implemented
+last-updated: 2026-09-04
 owner-step: S0
 implemented-at: S4
 ---
 
 # AI safety
+
+## Implementation status (S4)
+
+Landed in `sherwood-decision` (`AiDecider::from_provider`, `OpenAiCompatProvider` behind the
+`openai` feature) and `sherwood-cli` (`[ai]` config, `build_decider`):
+
+- Structural separation — untrusted market data in a `<market_data>` block; the system prompt
+  names it as data and tells the model to ignore instructions inside it.
+- Detection — the symbol field is scanned for instruction markers and control / zero-width
+  characters; a hit holds *without* calling the provider.
+- Length cap on the untrusted symbol field; the `reason` string is truncated and treated as
+  opaque.
+- Strict output schema — `serde` with `deny_unknown_fields`, a code-fence strip, `Decimal`
+  (a float is a parse error), semantic checks on `action` and `fraction`.
+- Fallback chain — invalid JSON retries once with a firmer prompt, then `Hold`; provider
+  error, timeout, budget exhausted, injection flagged all → `Hold`.
+- Per-run call budget (`ai.max_calls_per_run`); per-call timeout and `max_tokens`.
+- Optional symbol universe (`ai.universe`); empty means "accept the tick's symbol".
+- The API key is a `vault:` reference resolved at load — a literal key in the config is
+  rejected. The model is never handed credentials.
+
+Still draft / deferred:
+
+- NFKC normalisation and delimiter escaping (only control / zero-width stripping today).
+- `schemars`-generated schema (plain hand-written `serde` struct for now).
+- Per-day cost ceiling and the cross-consumer quota manager (S4.7).
+- Provenance audit fields (prompt hash, raw response, token/cost accounting) — arrive with
+  the logging layer at S13; today the decision and fallbacks are `tracing`-logged.
+- Mode A / Mode B gating (ADR-0002) is not yet enforced in the runner: `decider = "ai"` is
+  effectively Mode B. Live mode is still impossible (paper-only runner), so the ADR-0002
+  precondition ("refused in live until a paper baseline exists") holds trivially.
+
+The rest of this document is the target design.
 
 A language model in a trading loop is not a normal dependency. It is non-deterministic, it
 consumes attacker-influenced text, and its output is acted on with money. These are the
