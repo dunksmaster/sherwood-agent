@@ -9,6 +9,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood-server` skeleton + `sherwood serve` (S9a)** — the local control-plane HTTP API.
+  axum bound to loopback (a non-loopback bind is refused — TLS is a later concern); one
+  `{ code, message, correlation_id }` error envelope on every failure; bearer-token auth
+  with a constant-time compare (`subtle`), the token generated into the `sherwood-secrets`
+  vault on first run and never logged. Routes: `GET /v1/health` (open) and
+  `POST /v1/hook/pretooluse` (bearer) which runs S7's `HookGate` against a caller-supplied
+  portfolio + market context — a *denied* tool call is a `200` with `{"decision":"deny",…}`,
+  only a malformed request is a `4xx`. New `[server]` (bind, `token_ref`) and `[hook]`
+  (`read_tools` / `place_tools` / `cancel_tools`) config sections. 13 new tests.
 - **`PreToolUse` hook decision core (S7.1–S7.2)** — `sherwood-execution::hook`, the
   fail-closed choke point for [ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3.
   `HookGate::evaluate` takes an intercepted agent `ToolCall` and returns `HookOutcome::Allow`

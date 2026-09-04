@@ -1,16 +1,25 @@
 ---
-status: stub
-last-updated: 2026-09-03
+status: partial
+last-updated: 2026-09-04
 owner-step: S9
-generated: true
+generated: false
 ---
 
 # HTTP API
 
-**Not yet written — and will not be hand-written.**
+The full reference will be generated from `utoipa` annotations at **S9c**; edit the
+annotations, not this document, once that lands.
 
-The API reference is generated from `utoipa` annotations on the axum handlers at **S9**. This
-file will be replaced by generated output; edit the annotations, not this document.
+## Routes so far (S9a — `sherwood-server`)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `GET` | `/v1/health` | none | `{ status, mode, uptime_secs }` — liveness |
+| `POST` | `/v1/hook/pretooluse` | bearer | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
+
+The server binds loopback only; a non-loopback bind is refused (TLS is a later concern). The
+bearer token is generated into the `sherwood-secrets` vault on first `sherwood serve` and
+compared in constant time.
 
 ## Contract (from [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md#api))
 

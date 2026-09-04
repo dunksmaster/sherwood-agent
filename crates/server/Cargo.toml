@@ -1,0 +1,37 @@
+[package]
+name = "sherwood-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+sherwood-core = { path = "../core" }
+sherwood-execution = { path = "../execution" }
+sherwood-secrets = { path = "../secrets" }
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+] }
+tokio = { workspace = true, features = ["net"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+subtle = "2"
+getrandom = "0.2"
+hex.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["net", "macros", "rt-multi-thread"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+rust_decimal_macros.workspace = true
+
+[lints]
+workspace = true

@@ -501,6 +501,8 @@ mod tests {
             ai: Default::default(),
             copytrade: Default::default(),
             sniper: Default::default(),
+            server: Default::default(),
+            hook: Default::default(),
         };
 
         run(cfg, &AtomicBool::new(false)).await.unwrap();
