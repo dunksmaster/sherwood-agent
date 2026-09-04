@@ -139,6 +139,9 @@ cargo run -p sherwood-cli -- check config.toml
 #    language model instead of the rules — still paper, still gated.
 cargo run -p sherwood-cli -- run config.toml
 
+# 5b. Backtest the same feed and print performance metrics (see docs/BACKTEST.md)
+cargo run -p sherwood-cli -- backtest config.toml
+
 # 6. Or start the local control-plane API (loopback, bearer token minted into
 #    the vault on first run). Exposes /v1/health and the PreToolUse order gate.
 cargo run -p sherwood-cli -- serve config.toml
@@ -150,7 +153,7 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**Early build.** 136 Rust tests pass, the dashboard builds, and CI is green. The plan, the standards, the threat model,
+**Early build.** 161 Rust tests pass, the dashboard builds, and CI is green. The plan, the standards, the threat model,
 and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance deliverable.
 
 - **Done (S0–S6):** the S0 doc set; a tested `core` with `RiskGate` and `Portfolio`; a
@@ -162,11 +165,14 @@ and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance
   ([ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3); `sherwood-server` on
   loopback — bearer auth, 3 RBAC roles, error envelope, kill switch, PAPER/LIVE toggle,
   `/v1/metrics`, rate limit, and read-only portfolio / activity / audit-verify views.
-- **Done (S10):** the `frontend/` dashboard — token login, PAPER/**LIVE** badge, portfolio +
-  activity views, admin kill-switch and mode toggle.
-- **Next:** fold the run loop into `serve` + a WebSocket event feed + generated OpenAPI (S9d),
-  then the approval gate (S11) and scheduler (S12).
-- **Not started:** the approval gate, the scheduler, a backtest harness.
+- **Done (S10, S11, S12a, S14a):** the `frontend/` dashboard (token login, PAPER/**LIVE**
+  badge, portfolio + activity + approvals views, kill-switch and mode toggle); the
+  human-in-the-loop **approval gate**; per-session **spend budgets**; and `sherwood
+  backtest` with total return / drawdown / win rate / profit factor / expectancy.
+- **Next:** `utoipa` OpenAPI (S9e), notifications + log rotation (S13), Docker +
+  `backup`/`restore` (S15), then the v0.1 tag (S16).
+- **Deferred:** the cron scheduler / live-feed monitors (S12b) and A/B backtest (S14b) —
+  both want a live feed or the run loop in `serve`.
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
 code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).

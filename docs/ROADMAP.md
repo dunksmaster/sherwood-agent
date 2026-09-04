@@ -187,11 +187,12 @@ land with S9 (`sherwood-server`).
 
 ## S14–S16 — hardening and release
 
-| Step | Task |
-|---|---|
-| S14 | Backtest and replay: historical quote loader, deterministic replay with injected clock, metrics (P&L curve, max drawdown, hit rate, profit factor, expectancy), A/B comparison of deciders |
-| S15 | Reconnect and backoff stress tests, Docker image and compose stack, `sherwood backup` / `sherwood restore`, `RUNBOOK.md`, threat-model sign-off |
-| S16 | v0.1 release — signed tag, SBOM, release notes |
+| Step | Task | Status |
+|---|---|---|
+| S14a | `sherwood backtest <config>` — replay the `feed_path` CSV through the configured decider + risk gate (the same `run_loop`), print total return, max drawdown, closed-trade win rate, gross profit/loss, profit factor, expectancy. Deterministic; nothing persisted; `order_cooldown_secs` forced to `0`. See [BACKTEST.md](BACKTEST.md). | done |
+| S14b | A/B comparison of two deciders in one run; a historical quote loader; walk-forward | pending |
+| S15 | Reconnect and backoff stress tests, Docker image and compose stack, `sherwood backup` / `sherwood restore`, `RUNBOOK.md`, threat-model sign-off | pending |
+| S16 | v0.1 release — signed tag, SBOM, release notes | pending |
 
 ## v0.2 — Solana modules
 

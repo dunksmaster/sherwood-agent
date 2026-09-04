@@ -67,6 +67,7 @@ recorded rather than forgotten.
 | Document | Status | What it covers |
 |---|---|---|
 | [LIVE_EXECUTION.md](LIVE_EXECUTION.md) | accepted | The operator boundary and how live execution gets wired |
+| [BACKTEST.md](BACKTEST.md) | partial | `sherwood backtest` — metrics and, deliberately, what it does not tell you |
 
 ## Stubs — written at the step that needs them
 

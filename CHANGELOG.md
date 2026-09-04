@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood backtest` (S14a)** — replays the `[general] feed_path` CSV through the
+  configured decider and the risk gate (the same `run_loop` as `sherwood run`, same paper
+  executor) and prints a performance summary: total return, max drawdown (peak-to-trough of
+  the per-tick equity curve), fills, closed trades + win rate, gross profit / loss, profit
+  factor, expectancy per trade. Closed-trade P&L uses average-cost basis; a partial sell
+  closes a proportional slice. Deterministic, nothing persisted, `order_cooldown_secs` forced
+  to `0`. See [docs/BACKTEST.md](docs/BACKTEST.md) for what it does and does **not** tell you.
 - **Per-session spend budgets (S12a)** — three `[server]` hard stops independent of the risk
   config: `max_session_orders`, `max_session_notional`, `max_session_duration_secs` (any `0`
   = unlimited). Once a cap latches, `POST /v1/hook/pretooluse` denies every further
