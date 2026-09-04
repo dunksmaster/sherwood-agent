@@ -72,6 +72,10 @@ cors_origins       = []         # browser origins allowed to call the API, e.g.
                                 # Empty = same-origin only.
 # static_dir       = "frontend/dist"  # serve the built dashboard at / (run `npm run build`
                                        # in frontend/ first). Omit for API-only + `npm run dev`.
+approval_mode        = "auto"          # "auto" = the risk gate decides. "manual" = every
+                                       # risk-passing order waits for operator approval in
+                                       # the dashboard (or on the API).
+approval_timeout_secs = 60             # a pending approval auto-denies after this long
 
 [hook]
 # The PreToolUse order gate (ADR-0001 Option 3). Only tools listed here may be

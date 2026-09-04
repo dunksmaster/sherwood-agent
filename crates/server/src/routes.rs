@@ -9,6 +9,8 @@
 //! | `GET`  | `/v1/activity` | viewer | recent audit events + fill count |
 //! | `GET`  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
 //! | `GET`  | `/v1/events` | viewer | SSE — new audit-chain rows as they land |
+//! | `GET`  | `/v1/approvals` | viewer | the approval queue + mode |
+//! | `POST` | `/v1/approvals/{id}` | operator | approve / deny a pending order |
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -20,7 +22,7 @@
 //! The read-only views serve whatever `sherwood run` last persisted to the same
 //! `state_path`; without one configured they answer `404`.
 
-use axum::extract::{Query, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header::CONTENT_TYPE;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::IntoResponse;
@@ -29,8 +31,11 @@ use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use sherwood_core::{Asset, GateContext, Portfolio};
-use sherwood_execution::{HookGate, HookOutcome, ToolCall};
+use sherwood_execution::order_parse::parse_order;
+use sherwood_execution::{HookGate, HookOutcome, ToolCall, ToolClass};
 use sherwood_store::{AuditEvent, AuditVerification, SqliteStore, Store};
+
+use crate::approvals::{Approval, ApprovalMode, ApprovalState};
 use std::convert::Infallible;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
@@ -154,6 +159,33 @@ pub async fn pretooluse(
     };
 
     let outcome = HookGate::new(&state.allowlist, &control.risk).evaluate(&req.tool_call, &ctx);
+    drop(control); // release the risk-config read lock before any await
+
+    // In `manual` mode a risk-passing *order* is held for the operator. Reads,
+    // cancels, and anything the gate already denied are unaffected.
+    if matches!(outcome, HookOutcome::Allow)
+        && state.approval_mode == ApprovalMode::Manual
+        && state.allowlist.classify(&req.tool_call.name) == Some(ToolClass::PlaceOrder)
+    {
+        if let Ok(order) = parse_order(&req.tool_call.name, &req.tool_call.arguments, Decimal::ZERO)
+        {
+            let ticket = state.approvals.enqueue(&req.tool_call.name, &order);
+            tracing::info!(id = %ticket.id, tool = %req.tool_call.name, "hook: order held for approval");
+            let decided = ticket.wait().await;
+            let held = match decided {
+                ApprovalState::Approved => HookOutcome::Allow,
+                ApprovalState::Denied => HookOutcome::Deny {
+                    reason: "operator denied the order".into(),
+                },
+                ApprovalState::Expired | ApprovalState::Pending => HookOutcome::Deny {
+                    reason: "approval timed out".into(),
+                },
+            };
+            tracing::info!(?decided, "hook: approval resolved");
+            return Ok(Json(held));
+        }
+    }
+
     match &outcome {
         HookOutcome::Allow => tracing::info!(tool = %req.tool_call.name, "hook: allow"),
         HookOutcome::Deny { reason } => {
@@ -351,6 +383,70 @@ pub async fn get_audit_verify(
             }
         }
     }))
+}
+
+// ---- approval gate ----
+
+#[derive(Serialize)]
+pub struct ApprovalsView {
+    mode: ApprovalMode,
+    pending: usize,
+    approvals: Vec<Approval>,
+}
+
+pub async fn get_approvals(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Json<ApprovalsView>> {
+    caller.require(Role::Viewer)?;
+    Ok(Json(ApprovalsView {
+        mode: state.approval_mode,
+        pending: state.approvals.pending_count(),
+        approvals: state.approvals.list(),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct DecisionRequest {
+    /// `"approve"` or `"deny"`.
+    pub decision: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+pub async fn post_approval(
+    State(state): State<AppState>,
+    caller: Caller,
+    Path(id): Path<String>,
+    Json(req): Json<DecisionRequest>,
+) -> ApiResult<Json<Approval>> {
+    caller.require(Role::Operator)?;
+    let target = match req.decision.as_str() {
+        "approve" => ApprovalState::Approved,
+        "deny" => ApprovalState::Denied,
+        other => {
+            return Err(ApiError::bad_request(format!(
+                "decision must be \"approve\" or \"deny\", got {other:?}"
+            )))
+        }
+    };
+    let changed = state
+        .approvals
+        .decide(&id, target, req.reason)
+        .map_err(ApiError::bad_request)?;
+    if !changed {
+        return Err(ApiError::not_found(format!(
+            "approval {id} is unknown or already decided"
+        )));
+    }
+    tracing::info!(%id, ?target, role = ?caller.0, "approval decided");
+    state
+        .approvals
+        .list()
+        .into_iter()
+        .find(|a| a.id == id)
+        .map(Json)
+        .ok_or_else(|| ApiError::internal("approval vanished after decision"))
 }
 
 /// How often the SSE stream polls the store for new audit rows.

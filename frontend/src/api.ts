@@ -48,6 +48,31 @@ export interface AuditVerifyView {
   broken_at: number | null;
 }
 
+export type ApprovalState = "pending" | "approved" | "denied" | "expired";
+export type ApprovalMode = "auto" | "manual";
+
+export interface Approval {
+  id: string;
+  state: ApprovalState;
+  tool: string;
+  order: {
+    symbol: string;
+    side: "buy" | "sell";
+    quantity: string;
+    limit_price: string | null;
+    reason: string;
+  };
+  created_at: string;
+  decided_at: string | null;
+  decision_reason: string | null;
+}
+
+export interface ApprovalsView {
+  mode: ApprovalMode;
+  pending: number;
+  approvals: Approval[];
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -114,6 +139,17 @@ export const api = {
     req<ControlView>("/v1/mode", t, {
       method: "POST",
       body: JSON.stringify({ mode, reauth }),
+    }),
+  approvals: (t: string) => req<ApprovalsView>("/v1/approvals", t),
+  decideApproval: (
+    t: string,
+    id: string,
+    decision: "approve" | "deny",
+    reason?: string,
+  ) =>
+    req<Approval>(`/v1/approvals/${encodeURIComponent(id)}`, t, {
+      method: "POST",
+      body: JSON.stringify({ decision, reason }),
     }),
 };
 

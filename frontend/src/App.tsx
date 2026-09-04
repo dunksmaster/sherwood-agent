@@ -6,6 +6,7 @@ import { useAuditStream } from "./hooks/useAuditStream.ts";
 import { StatusBar } from "./views/StatusBar.tsx";
 import { PortfolioCard } from "./views/PortfolioCard.tsx";
 import { ActivityList } from "./views/ActivityList.tsx";
+import { ApprovalsCard } from "./views/ApprovalsCard.tsx";
 import { Controls } from "./views/Controls.tsx";
 
 const POLL_MS = 4000;
@@ -49,6 +50,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   // it can be slow. It also doubles as the fallback if the stream is down.
   const activity = usePoll(() => api.activity(token, 25), POLL_MS * 3, onUnauth);
   const audit = usePoll(() => api.auditVerify(token), POLL_MS * 4, onUnauth);
+  // Approvals are rare but time-sensitive when they appear — poll fast.
+  const approvals = usePoll(() => api.approvals(token), 2000, onUnauth);
 
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const onBatch = useCallback((rows: AuditEvent[]) => {
@@ -76,6 +79,12 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       )}
       <div className="grid">
         <PortfolioCard data={portfolio.data} error={portfolio.error} />
+        <ApprovalsCard
+          data={approvals.data}
+          error={approvals.error}
+          token={token}
+          onDecided={approvals.refresh}
+        />
         <ActivityList
           events={events}
           data={activity.data}

@@ -75,6 +75,12 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
             "no [server] static_dir — API only (run the dashboard with `npm run dev`)"
         ),
     }
+    if cfg.server.approval_mode == "manual" {
+        tracing::info!(
+            timeout_secs = cfg.server.approval_timeout_secs,
+            "[server] approval_mode = manual — risk-passing orders wait for operator approval"
+        );
+    }
 
     let store = match &cfg.general.state_path {
         Some(path) => {
