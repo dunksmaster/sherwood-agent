@@ -92,6 +92,8 @@ sherwood-agent/
 │   └── cli/          the `sherwood` binary
 ├── frontend/         React + Vite + TS control-plane dashboard
 ├── deploy/           Prometheus scrape + alert rules, Grafana dashboard JSON
+├── Dockerfile        multi-stage build → debian:slim runtime (see docs/DEPLOYMENT.md)
+├── docker-compose.yml
 ├── .sqlx/            committed sqlx offline query cache (CI uses this)
 ├── docs/             the plan, standards, security, ADRs — start at docs/README.md
 ├── feeds/            sample CSV price feeds for `sherwood run --feed_path`
@@ -173,10 +175,12 @@ and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance
   badge, portfolio + activity + approvals views, kill-switch and mode toggle); the
   human-in-the-loop **approval gate**; per-session **spend budgets**; and `sherwood
   backtest` with total return / drawdown / win rate / profit factor / expectancy.
-- **Next:** `utoipa` OpenAPI (S9e), notifications + log rotation (S13), Docker +
-  `backup`/`restore` (S15), then the v0.1 tag (S16).
-- **Deferred:** the cron scheduler / live-feed monitors (S12b) and A/B backtest (S14b) —
-  both want a live feed or the run loop in `serve`.
+- **Done (S13a, S15):** `/v1/metrics` + `deploy/` (Prometheus/Grafana), rolling JSON logs,
+  `sherwood backup`/`restore`, `RUNBOOK.md`, a multi-stage `Dockerfile`, `DEPLOYMENT.md`,
+  and the [threat-model sign-off](docs/THREAT-MODEL.md#sign-off).
+- **Left for v0.1:** `utoipa` OpenAPI (S9e), then the signed v0.1 tag + release notes (S16).
+- **Deferred to v0.2:** live-venue reconnection/reconciliation (S7.4–S8), the cron
+  scheduler / live-feed monitors (S12b), A/B backtest (S14b).
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
 code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).

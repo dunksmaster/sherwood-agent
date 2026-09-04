@@ -193,7 +193,8 @@ land with S9 (`sherwood-server`).
 | S14a | `sherwood backtest <config>` — replay the `feed_path` CSV through the configured decider + risk gate (the same `run_loop`), print total return, max drawdown, closed-trade win rate, gross profit/loss, profit factor, expectancy. Deterministic; nothing persisted; `order_cooldown_secs` forced to `0`. See [BACKTEST.md](BACKTEST.md). | done |
 | S14b | A/B comparison of two deciders in one run; a historical quote loader; walk-forward | pending |
 | S15a | `sherwood backup <config> <dir>` / `sherwood restore <config> <backup-dir> [--force]` — copy the state DB (+ WAL sidecars) and the vault; `restore` won't clobber without `--force`. [RUNBOOK.md](RUNBOOK.md) written against what v0.1 actually has. | done |
-| S15b | Docker image + compose stack (sherwood + Prometheus + Grafana), `DEPLOYMENT.md`, threat-model sign-off | pending |
+| S15b | Multi-stage `Dockerfile` (Rust → dashboard → `debian:slim`, non-root), `docker-compose.yml` (host-network `serve`), `DEPLOYMENT.md`, **threat-model sign-off** ([THREAT-MODEL.md](THREAT-MODEL.md#sign-off) → reviewed). Prometheus/Grafana stay on the host — the server is loopback-only. Image build not yet CI-gated. | done |
+| S15c | Reconnect / backoff stress tests, CI Docker-image build | pending — reconnect logic is S8 (live venue) |
 | S16 | v0.1 release — signed tag, SBOM, release notes | pending |
 
 ## v0.2 — Solana modules

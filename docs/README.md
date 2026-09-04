@@ -44,7 +44,7 @@ recorded rather than forgotten.
 |---|---|---|
 | [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md) | accepted | Lints, MSRV, error handling, determinism, testing, CI gates, process |
 | [SECURITY.md](SECURITY.md) | accepted | Security architecture, credential lifecycle, spend controls, kill switch, reporting |
-| [THREAT-MODEL.md](THREAT-MODEL.md) | draft | STRIDE across the pipeline, including MCP- and AI-specific threats |
+| [THREAT-MODEL.md](THREAT-MODEL.md) | reviewed (S15) | STRIDE across the pipeline; sign-off lists implemented / partial / deferred mitigations |
 | [AI-SAFETY.md](AI-SAFETY.md) | partially-implemented | Prompt injection, output schema enforcement, budgets, decision provenance |
 
 ## Legal and provenance
@@ -70,6 +70,7 @@ recorded rather than forgotten.
 | [BACKTEST.md](BACKTEST.md) | partial | `sherwood backtest` — metrics and, deliberately, what it does not tell you |
 | [OBSERVABILITY.md](OBSERVABILITY.md) | partial | `/v1/metrics` catalogue, `SHERWOOD_LOG_DIR` rotation, alert rules + Grafana JSON ([`deploy/`](../deploy/README.md)) |
 | [RUNBOOK.md](RUNBOOK.md) | partial | Stopping, diagnosing, recovering, `backup` / `restore` |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | partial | Bare binary + systemd, the `Dockerfile` / `docker-compose.yml`, the single-writer SQLite constraint |
 
 ## Stubs — written at the step that needs them
 
@@ -78,7 +79,6 @@ recorded rather than forgotten.
 | [ROBINHOOD-API.md](ROBINHOOD-API.md) | S7 | Asset classes, order types, settlement, rate limits, error codes |
 | [API.md](API.md) | S9 | HTTP API — generated from `utoipa`, not hand-written |
 | [FRONTEND-ARCH.md](FRONTEND-ARCH.md) | S10 | Dashboard state management, auth flow, reconnection |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | S15b | Docker, cross-compilation, install methods |
 
 ## External reviews
 

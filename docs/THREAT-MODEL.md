@@ -1,14 +1,15 @@
 ---
-status: draft
-last-updated: 2026-09-03
+status: reviewed
+last-updated: 2026-09-04
 owner-step: S0
-review-due: S15
+reviewed-at: S15
 ---
 
 # Threat model
 
-STRIDE over the v0.1 pipeline. Draft — signed off at S15 against the implemented system, not
-the planned one.
+STRIDE over the v0.1 pipeline. Reviewed at S15 against the **implemented** paper system;
+the [sign-off](#sign-off) at the end records which mitigations are live, which are partial,
+and which are deferred to the live-venue work (v0.2 / S7.4–S8).
 
 ## Scope and trust boundaries
 
@@ -125,12 +126,67 @@ API client, and it deserves naming:
 ## Residual risks — accepted for v0.1
 
 - A correct-looking but bad trading decision within all configured limits. This is market
-  risk, not a security control failure; caps bound it, nothing prevents it.
+  risk, not a security control failure; the risk gate, the approval gate, and the
+  per-session budget bound it — nothing prevents it.
 - Compromise of the operator's machine defeats every control listed here.
-- Robinhood-side outages or errors can leave local and remote state divergent until
-  reconciliation runs.
+- The state DB is not encrypted at rest by default (SQLCipher is unimplemented); protection
+  relies on full-disk encryption. The vault *is* AEAD-encrypted.
+- The dashboard's `PreToolUse` hook evaluates against a portfolio/market context the caller
+  supplies; a caller that lies to the hook can get a worse order past the risk checks. In
+  v0.1 the only caller is the operator's own agent on loopback. Tightened when the server
+  owns live portfolio state.
+- Robinhood-side outages, order reconciliation, and a genuine venue session are v0.2 (S7.4–
+  S8); until then the mitigations that depend on them are not in effect.
 
 ## Sign-off
 
-This document is `draft` until S15, when it is reviewed against the built system and every
-mitigation is confirmed implemented or explicitly re-accepted as a residual risk.
+**Reviewed 2026-09-04 against the implemented paper system.** No blocking gap for a
+paper-only v0.1: every path to an order passes `RiskGate::check`, the approval gate, and the
+session budget; the audit chain is hash-linked and verifiable; secrets are AEAD-encrypted
+and never logged or returned; the API is loopback-only with a constant-time bearer compare
+and RBAC.
+
+### Implemented
+
+- Hash-chained tamper-evident audit log + `GET /v1/audit/verify` (Tampering, Repudiation).
+- Fail-closed `PreToolUse` decision core: unknown tool / unparseable args / any `RiskGate`
+  reject → deny; config-driven tool allowlist; reads & cancels pass, cancels even under a
+  hard stop (Elevation of privilege).
+- Approval gate — `manual` mode holds every risk-passing order for the operator, records who
+  decided and when, auto-denies on timeout (Elevation, Repudiation).
+- Per-session spend budgets (order count / notional / duration) that latch a deny until an
+  admin resets (Denial of service, Elevation).
+- Bearer auth, constant-time compare, three RBAC roles; mode toggle & kill switch need admin
+  **and** body re-auth; loopback-only bind refused otherwise; global rate limit
+  (Spoofing, Elevation, DoS).
+- `SecretString` zeroes on drop and prints `[redacted]`; secrets never formatted into
+  errors; no endpoint returns a secret; `secrets set` reads stdin, not argv (Info
+  disclosure).
+- AI decider: `<market_data>` delimiting, injection scan on the symbol field, strict-JSON
+  output, one retry then degrade-to-`Hold`, per-run call budget; reason string is opaque
+  (Info disclosure, model authority).
+- Supply chain: `cargo-deny` (licences + RustSec + bans + sources), committed lockfiles,
+  CycloneDX SBOM, `gitleaks` + GitGuardian, MSRV pin — all CI-gated.
+- Observability: metrics gauges + alert rules for kill switch, budget breached, approvals
+  backlog, high 5xx (DoS, monitoring).
+
+### Partial
+
+- **Config-change auditing** (`ConfigChanged` with before/after) — config is file-only and
+  validated on load; runtime changes (mode, kill switch, budget reset) are `tracing`-logged
+  and reversible, but not yet written to the hash chain.
+- **Spoofed / stale market data** — the decider has a liquidity floor and the hook has an
+  injection guard; cross-source staleness checks need a live feed (v0.2).
+- **DB encryption at rest** — SQLCipher feature-gate not implemented; FDE only.
+
+### Deferred (v0.2 / S7.4–S8, no live venue yet)
+
+- OAuth-grant custody, MCP endpoint spoofing defences beyond `rustls` + config URL.
+- Session-down fail-closed, exponential reconnect backoff, replaced-session supersede.
+- Local↔venue reconciliation; the `executed` / `settled` approval states.
+- A cross-consumer AI quota manager (per-run budget covers v0.1).
+- A filesystem kill-switch path independent of the server (only config + API + dashboard
+  today).
+
+None of the deferred items is reachable in a paper build, so each is an accepted absence
+rather than an open risk for v0.1.

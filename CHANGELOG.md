@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Docker + deployment docs + threat-model sign-off (S15b)** — a multi-stage `Dockerfile`
+  (Rust build → dashboard build → `debian:bookworm-slim` runtime, non-root, stripped) and a
+  `docker-compose.yml` that runs `serve` with `network_mode: host` (the server is
+  loopback-only). `docs/DEPLOYMENT.md` covers bare-binary + systemd, the container, the
+  single-writer SQLite constraint, and monitoring. `docs/THREAT-MODEL.md` reviewed against
+  the built system and marked `reviewed` — its sign-off splits every mitigation into
+  implemented / partial / deferred (v0.2). `.dockerignore` added.
 - **`sherwood backup` / `sherwood restore` (S15a)** — `backup <config> <dir>` copies the
   `[general] state_path` SQLite database (with its `-wal` / `-shm` sidecars) and the secret
   vault into a timestamped folder with a `MANIFEST.txt`. `restore <config> <backup-dir>`

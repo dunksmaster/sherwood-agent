@@ -33,6 +33,12 @@ Decisions that shaped the project but do not each warrant a full ADR. Newest fir
 
 ### 2026-09-04
 
+**Threat model reviewed and signed off (S15)** against the implemented paper system.
+`docs/THREAT-MODEL.md` status → `reviewed`; its sign-off section splits mitigations into
+implemented / partial / deferred (v0.2 / S7.4–S8). No blocking gap for a paper-only v0.1.
+Standing question **Q2** (where it runs) resolved: local first, Docker for portability — the
+server stays loopback-only, so there is no network-exposure recipe.
+
 **`sherwood serve` is a pure control plane — it does not run the trading loop.** The paper
 loop stays in `sherwood run` (feed → decider → gate → paper executor → store); `serve`
 reads the state `run` persists and controls the risk gate / kill switch. Rationale: under
@@ -116,7 +122,7 @@ Not blocking the current step, but they need answers before the step named.
 | # | Question | Needed by | Current default |
 |---|---|---|---|
 | Q1 | Single operator, or plan for multiple from the start? | S9 (RBAC depth) | Single operator, roles wired anyway |
-| Q2 | Where does it run — local Windows, Linux VPS, cloud? | S15 (packaging) | Local first, Docker for portability |
+| Q2 | ~~Where does it run?~~ | S15 | **Resolved (2026-09-04):** local first (bare binary + systemd), Docker for portability; loopback-only, no network exposure |
 | Q3 | Capital scale being designed around | S5 (spend caps) | Small — caps default low |
 | Q4 | NVIDIA NIM model choice | S4 | Undecided |
 | Q5 | Daily AI spend ceiling | S4 | Undecided |
