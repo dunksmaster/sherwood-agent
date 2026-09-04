@@ -1,0 +1,19 @@
+# gitleaks configuration. Extends the default ruleset; adds allowlists for
+# false positives the generic entropy rule trips on.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Crypto algorithm names and obvious test fixtures"
+
+# `XChaCha20-Poly1305` and friends are documented cipher names, not secrets.
+regexes = [
+    '''X?ChaCha20-Poly1305''',
+    '''correct horse battery staple''',
+]
+
+# Test fixtures: throw-away passphrases and fake API keys in test modules.
+paths = [
+    '''crates/secrets/src/lib\.rs''',
+]
