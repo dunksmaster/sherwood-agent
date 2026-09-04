@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`sherwood backup` / `sherwood restore` (S15a)** — `backup <config> <dir>` copies the
+  `[general] state_path` SQLite database (with its `-wal` / `-shm` sidecars) and the secret
+  vault into a timestamped folder with a `MANIFEST.txt`. `restore <config> <backup-dir>`
+  copies them back — it **refuses to overwrite existing live files without `--force`** and
+  prints every path it writes. Run both with `serve` / `run` stopped. `docs/RUNBOOK.md` is
+  written against what v0.1 actually provides (kill-switch routes, session-budget reset,
+  approvals, audit-verify, credential recovery, restore).
 - **Observability (S13a)** — `GET /v1/metrics` gains `sherwood_kill_switch`,
   `sherwood_mode_live`, `sherwood_approvals_pending`, `sherwood_session_orders_used`,
   `sherwood_session_notional_used`, and `sherwood_session_budget_breached` gauges — enough

@@ -136,8 +136,12 @@ venue. It is treated as security-critical:
 
 - SQLite encrypted with SQLCipher (feature-gated) or relying on full-disk encryption; the
   choice is recorded per deployment.
-- Backups are encrypted; the backup key is stored separately from the backups and its
-  recovery procedure is documented in the runbook.
+- `sherwood backup` (S15) is a plain file copy of the state DB + the vault into a directory.
+  The **vault is already AEAD-encrypted at rest**; the state DB inherits whatever protects it
+  in place (SQLCipher when feature-gated, otherwise full-disk encryption). Keep backups on an
+  encrypted volume off-box. A dedicated encrypted-archive backup with a separate key is a
+  later hardening item. `restore` refuses to overwrite live files without `--force`. Recovery
+  procedure: [RUNBOOK.md](RUNBOOK.md#recover).
 - Order history and account identifiers are treated as sensitive personal data.
 - Retention: market snapshots default to 90 days; audit and fills are retained indefinitely.
 
