@@ -1,18 +1,30 @@
 import { useState } from "react";
-import { api, ApiError, type Health } from "../api.ts";
+import { api, ApiError, fmtMoney, type Health, type SessionView } from "../api.ts";
 
 /**
  * Admin controls: the kill switch and the PAPER/LIVE toggle. Both require the
  * admin token again (server-side re-auth), so we prompt for it inline rather
  * than reuse the session token.
  */
+function budgetLine(s: SessionView): string {
+  const parts: string[] = [];
+  if (s.orders_cap > 0) parts.push(`${s.orders_used}/${s.orders_cap} orders`);
+  if (Number(s.notional_cap) > 0)
+    parts.push(`${fmtMoney(s.notional_used)}/${fmtMoney(s.notional_cap)} notional`);
+  if (s.duration_cap_secs > 0)
+    parts.push(`${s.elapsed_secs}s/${s.duration_cap_secs}s`);
+  return parts.length ? parts.join(" · ") : "no caps configured";
+}
+
 export function Controls({
   token,
   health,
+  session,
   onChanged,
 }: {
   token: string;
   health: Health | null;
+  session: SessionView | null;
   onChanged: () => void;
 }) {
   const [reauth, setReauth] = useState("");
@@ -76,6 +88,34 @@ export function Controls({
         <span className="mono">allow_live = true</span>. The bundled runner is
         paper-only regardless.
       </p>
+
+      {session && (
+        <div className="kv" style={{ marginTop: 12 }}>
+          <span className="k">
+            Session budget
+            {session.breached && stateBadgeBreached()}
+          </span>
+          <span className="row">
+            <span className="mono muted" style={{ fontSize: 12 }}>
+              {budgetLine(session)}
+            </span>
+            <button
+              disabled={!canAct}
+              onClick={() => void act(() => api.resetSession(token, reauth))}
+            >
+              Reset
+            </button>
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function stateBadgeBreached() {
+  return (
+    <span className="badge kill" style={{ marginLeft: 8 }}>
+      breached
+    </span>
   );
 }

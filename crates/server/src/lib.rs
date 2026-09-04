@@ -18,6 +18,8 @@
 //! | GET  | `/v1/events` | viewer | SSE stream of new audit-chain rows |
 //! | GET  | `/v1/approvals` | viewer | approval queue + mode |
 //! | POST | `/v1/approvals/{id}` | operator | approve / deny a pending order |
+//! | GET  | `/v1/session` | viewer | per-session budget usage |
+//! | POST | `/v1/session/reset` | admin + body re-auth | zero the session budget |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -26,6 +28,7 @@
 
 pub mod approvals;
 pub mod auth;
+pub mod budget;
 pub mod error;
 pub mod limit;
 pub mod metrics;
@@ -102,6 +105,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/events", get(routes::get_events))
         .route("/v1/approvals", get(routes::get_approvals))
         .route("/v1/approvals/{id}", post(routes::post_approval))
+        .route("/v1/session", get(routes::get_session))
+        .route("/v1/session/reset", post(routes::post_session_reset))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
@@ -708,6 +713,71 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn session_budget_caps_orders_and_reset_clears_it() {
+        use crate::budget::BudgetCaps;
+        let state = state_full(
+            ServerOpts {
+                budget_caps: BudgetCaps {
+                    max_orders: 1,
+                    ..BudgetCaps::default()
+                },
+                ..ServerOpts::default()
+            },
+            None,
+        );
+
+        // First order: allowed.
+        let r = call(
+            state.clone(),
+            post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+        )
+        .await;
+        assert_eq!(body_string(r).await, r#"{"decision":"allow"}"#);
+
+        // Second: over the session cap → deny.
+        let r = call(
+            state.clone(),
+            post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+        )
+        .await;
+        assert!(body_string(r).await.contains("session budget"));
+
+        // /v1/session reflects the breach.
+        let r = call(state.clone(), get_as("/v1/session", VIEWER)).await;
+        assert!(body_string(r).await.contains("\"breached\":true"));
+
+        // Reset needs admin + body re-auth; then orders flow again.
+        let r = call(
+            state.clone(),
+            post(
+                "/v1/session/reset",
+                Some(VIEWER),
+                serde_json::json!({ "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+
+        let r = call(
+            state.clone(),
+            post(
+                "/v1/session/reset",
+                Some(ADMIN),
+                serde_json::json!({ "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let r = call(
+            state,
+            post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+        )
+        .await;
+        assert_eq!(body_string(r).await, r#"{"decision":"allow"}"#);
     }
 
     #[tokio::test]

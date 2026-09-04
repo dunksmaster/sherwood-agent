@@ -74,7 +74,10 @@ order. Two classes:
 - **Maximum concurrent open symbols**
 - **Per-symbol cooldown between buys** (`now` from an injected `Clock`, never the wall clock)
 
-Still to come: per-day and per-symbol-per-day notional caps, per-run budgets (S5/S12).
+**Per-session budgets** (`sherwood-server`, S12a) add three more hard stops on top:
+`max_session_orders`, `max_session_notional`, `max_session_duration_secs`. Once any latches,
+every place-order is denied until an admin resets the session. Still to come: per-day and
+per-symbol-per-day notional caps.
 
 Defaults are deliberately small. Raising them is a config change that will be recorded in the
 audit log once config lives in the store (S2).

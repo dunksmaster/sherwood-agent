@@ -2,6 +2,7 @@
 
 use crate::approvals::{ApprovalMode, ApprovalStore};
 use crate::auth::TokenSet;
+use crate::budget::{BudgetCaps, SessionBudget};
 use crate::limit::RateLimiter;
 use crate::metrics::Metrics;
 use chrono::{DateTime, Utc};
@@ -61,6 +62,9 @@ pub struct ServerOpts {
     pub approval_mode: ApprovalMode,
     /// How long a pending approval waits before it auto-denies.
     pub approval_timeout: Duration,
+    /// Per-session spend caps (order count / notional / duration). Any `0` is
+    /// "no limit".
+    pub budget_caps: BudgetCaps,
 }
 
 impl Default for ServerOpts {
@@ -72,6 +76,7 @@ impl Default for ServerOpts {
             static_dir: None,
             approval_mode: ApprovalMode::Auto,
             approval_timeout: Duration::from_secs(60),
+            budget_caps: BudgetCaps::default(),
         }
     }
 }
@@ -93,6 +98,7 @@ pub struct AppState {
     pub static_dir: Option<Arc<std::path::PathBuf>>,
     pub approvals: Arc<ApprovalStore>,
     pub approval_mode: ApprovalMode,
+    pub budget: Arc<SessionBudget>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -119,6 +125,7 @@ impl AppState {
             static_dir: opts.static_dir.map(Arc::new),
             approvals: Arc::new(ApprovalStore::new(opts.approval_timeout)),
             approval_mode: opts.approval_mode,
+            budget: Arc::new(SessionBudget::new(opts.budget_caps)),
             started_at: Utc::now(),
         }
     }

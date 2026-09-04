@@ -10,7 +10,7 @@ generated: false
 The full reference will be generated from `utoipa` annotations at **S9c**; edit the
 annotations, not this document, once that lands.
 
-## Routes so far (S9a–S9d, S11, S11a — `sherwood-server`)
+## Routes so far (S9a–S9d, S11, S11a, S12a — `sherwood-server`)
 
 | Method | Path | Min role | Notes |
 |---|---|---|---|
@@ -23,6 +23,8 @@ annotations, not this document, once that lands.
 | `GET` | `/v1/events` | viewer | `text/event-stream`. Each `audit` event's data is a JSON array of audit-chain rows appended since the previous frame (empty when nothing changed). |
 | `GET` | `/v1/approvals` | viewer | `{ mode: "auto"\|"manual", pending, approvals[] }` — the approval queue (pending + recent). |
 | `POST` | `/v1/approvals/{id}` | operator | `{ decision: "approve"\|"deny", reason? }`. `404` if the id is unknown or already decided. |
+| `GET` | `/v1/session` | viewer | per-session budget: `{ orders_used, orders_cap, notional_used, notional_cap, elapsed_secs, duration_cap_secs, breached }`. |
+| `POST` | `/v1/session/reset` | admin | `{ reauth: "<admin token>" }` — zero the session budget counters and clear a breach. |
 | `POST` | `/v1/hook/pretooluse` | operator | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
 | `POST` | `/v1/mode` | admin | `{ mode: "paper"\|"live", reauth: "<admin token>" }`. `live` is `403` unless `[server] allow_live = true`. |
 | `POST` | `/v1/kill` | admin | `{ engage: bool, reauth: "<admin token>" }`. Engaging makes the hook deny every order immediately. |

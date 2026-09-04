@@ -73,6 +73,16 @@ export interface ApprovalsView {
   approvals: Approval[];
 }
 
+export interface SessionView {
+  orders_used: number;
+  orders_cap: number;
+  notional_used: string;
+  notional_cap: string;
+  elapsed_secs: number;
+  duration_cap_secs: number;
+  breached: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -141,6 +151,12 @@ export const api = {
       body: JSON.stringify({ mode, reauth }),
     }),
   approvals: (t: string) => req<ApprovalsView>("/v1/approvals", t),
+  session: (t: string) => req<SessionView>("/v1/session", t),
+  resetSession: (t: string, reauth: string) =>
+    req<SessionView>("/v1/session/reset", t, {
+      method: "POST",
+      body: JSON.stringify({ reauth }),
+    }),
   decideApproval: (
     t: string,
     id: string,

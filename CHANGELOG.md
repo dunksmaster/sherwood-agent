@@ -9,6 +9,14 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Per-session spend budgets (S12a)** — three `[server]` hard stops independent of the risk
+  config: `max_session_orders`, `max_session_notional`, `max_session_duration_secs` (any `0`
+  = unlimited). Once a cap latches, `POST /v1/hook/pretooluse` denies every further
+  place-order (`"session budget: …"`) until an admin calls `POST /v1/session/reset` (with
+  body re-auth). Reads and cancels never touch the budget. `GET /v1/session` shows
+  `{ orders_used/cap, notional_used/cap, elapsed_secs/cap, breached }`; the dashboard shows a
+  budget line with a Reset button. The cron scheduler and price-threshold monitors (the rest
+  of S12) are deferred — they drive the run loop, which `serve` does not host.
 - **Approval gate (S11)** — a human-in-the-loop step between the risk gate and the venue
   ([ADR-0005](docs/adr/0005-approval-gate.md)). `[server] approval_mode`: `auto` (default,
   transparent — unchanged) or `manual`. In `manual` mode a risk-passing **place-order** call

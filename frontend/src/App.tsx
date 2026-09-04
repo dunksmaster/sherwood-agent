@@ -52,6 +52,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
   const audit = usePoll(() => api.auditVerify(token), POLL_MS * 4, onUnauth);
   // Approvals are rare but time-sensitive when they appear — poll fast.
   const approvals = usePoll(() => api.approvals(token), 2000, onUnauth);
+  const session = usePoll(() => api.session(token), POLL_MS, onUnauth);
 
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const onBatch = useCallback((rows: AuditEvent[]) => {
@@ -66,7 +67,8 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
   const refreshControls = useCallback(() => {
     health.refresh();
-  }, [health]);
+    session.refresh();
+  }, [health, session]);
 
   return (
     <div className="wrap">
@@ -94,6 +96,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         <Controls
           token={token}
           health={health.data}
+          session={session.data}
           onChanged={refreshControls}
         />
         <div className="card">
