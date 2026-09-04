@@ -3,7 +3,11 @@
 //! | Method | Path | Min role | Notes |
 //! |---|---|---|---|
 //! | `GET`  | `/v1/health` | none | liveness, mode, kill-switch, uptime |
+//! | `GET`  | `/v1/metrics` | none | Prometheus text |
 //! | `GET`  | `/v1/control` | viewer | current mode + kill-switch |
+//! | `GET`  | `/v1/portfolio` | viewer | last persisted portfolio snapshot |
+//! | `GET`  | `/v1/activity` | viewer | recent audit events + fill count |
+//! | `GET`  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -11,20 +15,31 @@
 //! A *denied* tool call is a `200` with `{"decision":"deny",…}` — the caller
 //! (the agent's `PreToolUse` hook script) maps the body onto the CLI's
 //! permission schema. Only a malformed request is a `4xx`.
+//!
+//! The read-only views serve whatever `sherwood run` last persisted to the same
+//! `state_path`; without one configured they answer `404`.
 
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::header::CONTENT_TYPE;
 use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sherwood_core::{GateContext, Portfolio};
+use sherwood_core::{Asset, GateContext, Portfolio};
 use sherwood_execution::{HookGate, HookOutcome, ToolCall};
+use sherwood_store::{AuditEvent, AuditVerification, SqliteStore, Store};
 
 use crate::auth::{Caller, Role};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{AppState, Mode};
+
+fn store(state: &AppState) -> ApiResult<&SqliteStore> {
+    state
+        .store
+        .as_deref()
+        .ok_or_else(|| ApiError::not_found("no state_path is configured; nothing to read"))
+}
 
 #[derive(Serialize)]
 pub struct Health {
@@ -210,5 +225,122 @@ pub async fn post_kill(
     Ok(Json(ControlView {
         mode: control.mode,
         kill_switch: control.kill_switch(),
+    }))
+}
+
+// ---- read-only views over the persisted state ----
+
+#[derive(Serialize)]
+pub struct PositionView {
+    symbol: String,
+    quantity: Decimal,
+    avg_cost: Option<Decimal>,
+}
+
+#[derive(Serialize)]
+pub struct PortfolioView {
+    cash: Decimal,
+    realized_pnl: Decimal,
+    open_positions: usize,
+    positions: Vec<PositionView>,
+}
+
+pub async fn get_portfolio(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Json<PortfolioView>> {
+    caller.require(Role::Viewer)?;
+    let pf = store(&state)?
+        .load_portfolio()
+        .await
+        .map_err(|e| ApiError::internal(format!("store: {e}")))?
+        .ok_or_else(|| ApiError::not_found("no portfolio snapshot has been written yet"))?;
+
+    let mut positions: Vec<PositionView> = pf
+        .positions()
+        .map(|(sym, qty)| PositionView {
+            symbol: sym.to_string(),
+            quantity: qty,
+            avg_cost: pf.avg_cost(&Asset::symbol(sym)),
+        })
+        .collect();
+    positions.sort_by(|a, b| a.symbol.cmp(&b.symbol));
+
+    Ok(Json(PortfolioView {
+        cash: pf.cash(),
+        realized_pnl: pf.realized_pnl(),
+        open_positions: pf.open_position_count(),
+        positions,
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct ActivityQuery {
+    #[serde(default = "default_activity_limit")]
+    limit: i64,
+}
+
+fn default_activity_limit() -> i64 {
+    50
+}
+
+#[derive(Serialize)]
+pub struct ActivityView {
+    /// Recent audit-chain events, oldest first.
+    recent: Vec<AuditEvent>,
+    /// Total fills recorded.
+    fills: usize,
+}
+
+pub async fn get_activity(
+    State(state): State<AppState>,
+    caller: Caller,
+    Query(q): Query<ActivityQuery>,
+) -> ApiResult<Json<ActivityView>> {
+    caller.require(Role::Viewer)?;
+    let s = store(&state)?;
+    let limit = q.limit.clamp(1, 500);
+    let recent = s
+        .audit_tail(limit)
+        .await
+        .map_err(|e| ApiError::internal(format!("store: {e}")))?;
+    let fills = s
+        .fills()
+        .await
+        .map_err(|e| ApiError::internal(format!("store: {e}")))?
+        .len();
+    Ok(Json(ActivityView { recent, fills }))
+}
+
+#[derive(Serialize)]
+pub struct AuditVerifyView {
+    ok: bool,
+    entries: Option<i64>,
+    broken_at: Option<i64>,
+}
+
+pub async fn get_audit_verify(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Json<AuditVerifyView>> {
+    caller.require(Role::Viewer)?;
+    let v = store(&state)?
+        .verify_audit_chain()
+        .await
+        .map_err(|e| ApiError::internal(format!("store: {e}")))?;
+    Ok(Json(match v {
+        AuditVerification::Ok { entries } => AuditVerifyView {
+            ok: true,
+            entries: Some(entries),
+            broken_at: None,
+        },
+        AuditVerification::Broken { at_seq, .. } => {
+            tracing::error!(at_seq, "audit chain verification FAILED");
+            AuditVerifyView {
+                ok: false,
+                entries: None,
+                broken_at: Some(at_seq),
+            }
+        }
     }))
 }

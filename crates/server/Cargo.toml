@@ -9,9 +9,11 @@ publish = false
 sherwood-core = { path = "../core" }
 sherwood-execution = { path = "../execution" }
 sherwood-secrets = { path = "../secrets" }
+sherwood-store = { path = "../store" }
 axum = { version = "0.8", default-features = false, features = [
     "http1",
     "json",
+    "query",
     "tokio",
 ] }
 tokio = { workspace = true, features = ["net"] }

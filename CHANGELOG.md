@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Read-only state views on the server (S11a)** — `sherwood serve` opens the same
+  `[general] state_path` database `sherwood run` writes, and exposes it: `GET /v1/portfolio`
+  (cash, realized P&L, open positions), `GET /v1/activity?limit=N` (recent audit-chain
+  events + fill count), `GET /v1/audit/verify` (recompute the hash chain — `{ ok, entries }`
+  or `{ ok: false, broken_at }`). All viewer-role; `404` through the envelope when no
+  `state_path` is configured or no snapshot exists yet. Gives the dashboard (S10) real data
+  before the full approval gate.
 - **Metrics, rate limit, CORS (S9c)** — `GET /v1/metrics` returns Prometheus text
   (hand-rolled counters — request totals, status-class breakdown, uptime, plus `kill_switch`
   and `mode_live` gauges; no `prometheus` crate). A global fixed-window rate limit

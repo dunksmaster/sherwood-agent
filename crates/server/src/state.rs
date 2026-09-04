@@ -6,6 +6,7 @@ use crate::metrics::Metrics;
 use chrono::{DateTime, Utc};
 use sherwood_core::RiskGate;
 use sherwood_execution::ToolAllowlist;
+use sherwood_store::SqliteStore;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -70,6 +71,9 @@ pub struct AppState {
     pub control: Arc<RwLock<Control>>,
     pub metrics: Arc<Metrics>,
     pub limiter: Arc<RateLimiter>,
+    /// Read-only handle to the persisted state written by `sherwood run`.
+    /// `None` when no `state_path` is configured.
+    pub store: Option<Arc<SqliteStore>>,
     pub allow_live: bool,
     pub cors_origins: Arc<Vec<String>>,
     pub started_at: DateTime<Utc>,
@@ -81,6 +85,7 @@ impl AppState {
         risk: RiskGate,
         allowlist: ToolAllowlist,
         opts: ServerOpts,
+        store: Option<Arc<SqliteStore>>,
     ) -> Self {
         Self {
             tokens: Arc::new(tokens),
@@ -91,6 +96,7 @@ impl AppState {
             })),
             metrics: Arc::new(Metrics::default()),
             limiter: Arc::new(RateLimiter::per_minute(opts.rate_limit_per_min)),
+            store,
             allow_live: opts.allow_live,
             cors_origins: Arc::new(opts.cors_origins),
             started_at: Utc::now(),
