@@ -9,9 +9,14 @@ mode = "paper"
 
 [risk]
 # Every generated order is checked against these before it can be executed.
+# Hard stops (kill_switch, max_daily_loss) reject every order. The rest gate
+# new entries only — a sell that de-risks is never blocked by them.
 max_order_notional    = 100      # cash-asset cap on a single order
 max_position_fraction = 0.10     # max share of equity in one asset
-max_daily_loss        = 50       # session realized-loss circuit breaker
+max_daily_loss        = 50       # realized-loss circuit breaker (hard stop)
+max_unrealized_loss   = 100      # mark-to-market open-loss limit; blocks new buys
+max_open_positions    = 10       # refuse a buy that opens an 11th symbol
+order_cooldown_secs   = 0        # min seconds between buys of the same symbol (0 = off)
 max_slippage          = 0.02     # reject orders asking for more tolerance
 allowlist             = []       # non-empty = only these symbols tradable
 denylist              = []       # never trade these

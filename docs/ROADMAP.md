@@ -111,22 +111,18 @@ from `GRADE-TARGET.md`.
 
 ## S4–S5 — decision layer and the paper loop
 
-| Step | Task | Crate |
-|---|---|---|
-| S4.1 | `Decider` registry — name to factory | `decision` |
-| S4.2 | `AiProvider` trait returning strict JSON | `decision` |
-| S4.3 | `NvidiaDecider` — `reqwest`, timeout, retry, token budget | `decision` |
-| S4.4 | Claude and Groq adapter stubs | `decision` |
-| S4.5 | Output schema enforcement and the fallback chain (see [AI-SAFETY.md](AI-SAFETY.md)) | `decision` |
-| S4.6 | Prompt template structure — system prompt, market context, rules, output schema | `decision` |
-| S4.7 | Shared AI quota manager | `supervisor` |
-| S5.1 | `PriceFeed` trait plus a CSV implementation | `core` |
-| S5.2 | Multi-asset runner — iterate configured assets, remove the `"ROAR"` hardcode | `cli` |
-| S5.3 | End-to-end loop over the event bus: feed → decider → gate → executor → store | `cli` |
-| S5.4 | `RiskGate` extension: unrealized-loss limit, max open positions, per-asset daily volume, cooldown | `core` |
-| S5.5 | Kill switch wired — bus event plus gate check | `core`, `cli` |
-| S5.6 | Graceful shutdown — SIGINT, flush state, exit | `cli` |
-| S5.7 | Deterministic harness — injected `Clock`, seeded RNG | `core`, `cli` |
+| Step | Task | Crate | Status |
+|---|---|---|---|
+| S4.1 | `Decider` registry — name to factory | `decision` | pending — one real decider so far |
+| S4.2–4.6 | `NvidiaDecider` etc.: OpenAI-compatible client, strict JSON, fallback chain, prompt template | `decision` | pending — needs the secrets vault (S6) for the API key |
+| S4.7 | Shared AI quota manager | `supervisor` | pending |
+| S5.1 | `PriceFeed` trait plus a CSV implementation | `core` | pending (next) |
+| S5.2 | Multi-asset runner — iterate configured assets, remove the `"ROAR"` hardcode | `cli` | pending (next) |
+| S5.3 | End-to-end loop over the event bus: feed → decider → gate → executor → store | `cli` | done (S1 + S3) |
+| S5.4 | `RiskGate` extension: unrealized-loss breaker, max open positions, per-symbol cooldown, via `GateContext` | `core` | done |
+| S5.5 | Kill switch wired — bus event plus gate check | `core`, `cli` | partial — gate check done; a runtime toggle needs the server (S9) |
+| S5.6 | Graceful shutdown — SIGINT, stop cleanly, snapshot on exit | `cli` | done (Pre-S0 + S1) |
+| S5.7 | Deterministic harness — injected `Clock` (done), seeded RNG (pending), `proptest` on gate arithmetic (pending) | `core`, `cli` | partial |
 
 **Exit criteria:** a multi-asset paper run from a CSV feed, with state persisted across a
 restart and a verifiable audit chain.

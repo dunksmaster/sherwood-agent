@@ -74,6 +74,9 @@ pub struct RiskSection {
     pub max_order_notional: Decimal,
     pub max_position_fraction: Decimal,
     pub max_daily_loss: Decimal,
+    pub max_unrealized_loss: Decimal,
+    pub max_open_positions: usize,
+    pub order_cooldown_secs: u64,
     pub max_slippage: Decimal,
     pub allowlist: HashSet<String>,
     pub denylist: HashSet<String>,
@@ -87,6 +90,9 @@ impl Default for RiskSection {
             max_order_notional: d.max_order_notional,
             max_position_fraction: d.max_position_fraction,
             max_daily_loss: d.max_daily_loss,
+            max_unrealized_loss: d.max_unrealized_loss,
+            max_open_positions: d.max_open_positions,
+            order_cooldown_secs: d.order_cooldown_secs,
             max_slippage: d.max_slippage,
             allowlist: d.allowlist,
             denylist: d.denylist,
@@ -101,6 +107,9 @@ impl RiskSection {
             max_order_notional: self.max_order_notional,
             max_position_fraction: self.max_position_fraction,
             max_daily_loss: self.max_daily_loss,
+            max_unrealized_loss: self.max_unrealized_loss,
+            max_open_positions: self.max_open_positions,
+            order_cooldown_secs: self.order_cooldown_secs,
             max_slippage: self.max_slippage,
             allowlist: self.allowlist.clone(),
             denylist: self.denylist.clone(),
@@ -122,6 +131,14 @@ impl RiskSection {
             dec!(1),
         )?;
         require_at_least("risk.max_daily_loss", self.max_daily_loss, dec!(0))?;
+        require_at_least(
+            "risk.max_unrealized_loss",
+            self.max_unrealized_loss,
+            dec!(0),
+        )?;
+        if self.max_open_positions == 0 {
+            bail!("risk.max_open_positions must be at least 1");
+        }
         require_in_closed("risk.max_slippage", self.max_slippage, dec!(0), dec!(1))?;
 
         let overlap: Vec<&String> = self.allowlist.intersection(&self.denylist).collect();

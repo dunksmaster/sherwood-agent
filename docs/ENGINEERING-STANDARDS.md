@@ -77,8 +77,10 @@ Non-test code that must lock a `Mutex` recovers from poisoning
 Backtest, paper, and live share the same strategy and gate code. That only holds if nothing
 in that path reads ambient state.
 
-- Time comes from an injected `Clock` trait. `Utc::now()` never appears in `core`,
-  `decision`, or gate code.
+- Time comes from `sherwood_core::Clock` (`SystemClock` in production, `FixedClock` in
+  tests). The `RiskGate` takes `now` as a field of `GateContext` — it never reads a clock.
+  `Utc::now()` is still used to *stamp* records (fills, audit rows, snapshots); it must not
+  appear in a decision or gate *branch*.
 - Randomness comes from an injected seeded RNG.
 - All I/O sits behind a trait with a test double.
 
