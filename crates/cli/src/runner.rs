@@ -17,6 +17,8 @@ use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
+use sherwood_chain::feed::{ChainFeed, ChainFeedConfig};
+use sherwood_chain::{tokens, HttpClient};
 use sherwood_core::{
     Asset, Clock, Decision, Fill, GateContext, MarketSnapshot, Order, OrderId, Portfolio,
     PriceFeed, RiskGate, Side, SystemClock, Tick, Venue,
@@ -361,13 +363,41 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
     .await
 }
 
+/// Build the feed `sherwood run` reads from: the live Robinhood Chain feed if
+/// `[chain] enabled = true`, else the configured CSV, else the built-in demo.
+/// **Still paper trading** either way — the feed only supplies prices; no
+/// wallet, no signing, no order ever reaches the venue.
+fn build_feed(cfg: &AppConfig) -> Result<Box<dyn PriceFeed>> {
+    if cfg.chain.enabled {
+        let client = HttpClient::new(cfg.chain.rpc_url.clone(), StdDuration::from_secs(30))
+            .map_err(|e| anyhow!("chain feed: {e}"))?;
+        let (_, denom_address, denom_decimals) = tokens::resolve(&cfg.chain.denom);
+        let feed_cfg = ChainFeedConfig {
+            denom_address,
+            denom_decimals,
+            poll_interval: StdDuration::from_secs(cfg.chain.poll_interval_secs),
+            ..ChainFeedConfig::default()
+        };
+        return Ok(Box::new(ChainFeed::new(
+            client,
+            &cfg.chain.symbols,
+            feed_cfg,
+        )));
+    }
+    Ok(match &cfg.general.feed_path {
+        Some(path) => Box::new(CsvFeed::open(path)?),
+        None => Box::new(SliceFeed::new(demo_feed())),
+    })
+}
+
 pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     tracing::info!(
-        "paper run: starting_cash={} decider={} state_path={:?} feed_path={:?}",
+        "paper run: starting_cash={} decider={} state_path={:?} feed_path={:?} chain_enabled={}",
         cfg.general.starting_cash,
         cfg.general.decider,
         cfg.general.state_path,
         cfg.general.feed_path,
+        cfg.chain.enabled,
     );
     let gate = RiskGate::new(cfg.risk.to_core());
     let decider = build_decider(&cfg)?;
@@ -377,10 +407,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
         None => None,
     };
 
-    let feed: Box<dyn PriceFeed> = match &cfg.general.feed_path {
-        Some(path) => Box::new(CsvFeed::open(path)?),
-        None => Box::new(SliceFeed::new(demo_feed())),
-    };
+    let feed = build_feed(&cfg)?;
 
     run_loop(
         Run {
@@ -559,6 +586,7 @@ mod tests {
             sniper: Default::default(),
             server: Default::default(),
             hook: Default::default(),
+            chain: Default::default(),
         };
 
         let rec = run_backtest(&cfg, &AtomicBool::new(false)).await.unwrap();
@@ -605,6 +633,7 @@ mod tests {
             sniper: Default::default(),
             server: Default::default(),
             hook: Default::default(),
+            chain: Default::default(),
         };
 
         run(cfg, &AtomicBool::new(false)).await.unwrap();

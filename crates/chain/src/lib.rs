@@ -24,9 +24,11 @@
 
 pub mod abi;
 pub mod erc20;
+pub mod feed;
 pub mod keccak;
 pub mod probe;
 pub mod rpc;
+pub mod tokens;
 pub mod univ4;
 
 #[cfg(test)]

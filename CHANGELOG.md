@@ -37,6 +37,26 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   conversion both check against the live values in
   [ROBINHOOD-CHAIN.md](docs/ROBINHOOD-CHAIN.md)). Still no wallet, no
   signing. 7 new unit tests (28 total in `sherwood-chain`).
+- **Live paper prices from Robinhood Chain (v0.2.1c).** New `sherwood_chain::feed::ChainFeed`
+  — a `sherwood_core::PriceFeed` backed by real Uniswap v4 pool reads. `[chain]` config
+  section (`enabled`, `rpc_url`, `symbols`, `denom`, `poll_interval_secs`); when enabled it
+  takes over from `feed_path`/the demo feed in `sherwood run`. **Still paper trading** — the
+  feed only supplies prices, no wallet, no signing, no order ever reaches the venue. Pool
+  discovery happens once per symbol and is cached; every later poll is one cheap `getSlot0`.
+  `next_tick` bridges the trait's sync contract to async reads via `block_in_place` +
+  `Handle::block_on`; a failing read retries with backoff and, past a cap, sleeps a full poll
+  interval rather than spinning or returning `None` (a live feed must never return `None`).
+  6 new unit tests, including two on a multi-thread Tokio runtime that exercise the real
+  blocking bridge against a mock transport.
+
+  **Bug found and fixed by the first live run:** `find_best_pool` originally discovered *any*
+  pool containing the requested token, regardless of what it was paired against, then
+  assumed the counter-currency was the requested denominator — so the deepest-by-liquidity
+  pool for NVDA turned out to be NVDA paired against an unrelated token, priced as if it were
+  NVDA/USDG, giving a result off by roughly 10¹²x. Fixed by filtering pool discovery to the
+  exact `(token, denom)` pair (`discover_pools_for_pair`, both `Initialize`-topic orderings);
+  `find_best_pool`/`read_price` now take an explicit `denom` address. Covered by a new
+  regression test asserting a pool paired against a third token is excluded.
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**

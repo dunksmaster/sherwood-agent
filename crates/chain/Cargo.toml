@@ -11,12 +11,14 @@ publish = false
 # Signing lands in `sherwood-signer` (v0.2.2), gated separately.
 
 [dependencies]
+sherwood-core = { path = "../core" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 rust_decimal.workspace = true
 rust_decimal_macros.workspace = true
+chrono.workspace = true
 async-trait.workspace = true
 hex.workspace = true
 tokio.workspace = true

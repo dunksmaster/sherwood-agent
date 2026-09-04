@@ -1747,6 +1747,7 @@ name = "sherwood-chain"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "hex",
  "reqwest",
  "rust_decimal",
@@ -1754,6 +1755,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
+ "sherwood-core",
  "thiserror",
  "tokio",
  "tracing",
