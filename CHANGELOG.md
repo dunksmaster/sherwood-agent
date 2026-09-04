@@ -9,6 +9,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`PreToolUse` hook decision core (S7.1–S7.2)** — `sherwood-execution::hook`, the
+  fail-closed choke point for [ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3.
+  `HookGate::evaluate` takes an intercepted agent `ToolCall` and returns `HookOutcome::Allow`
+  or `Deny { reason }`. A tool that is not on the `ToolAllowlist` is denied; an order tool
+  whose arguments do not parse is denied (never passed through); a parsed order is denied
+  unless it passes `RiskGate::check` unchanged; read-only and cancel tools pass without a
+  risk check, and cancels pass even when a hard stop is engaged. The allowlist is
+  config-driven — no Robinhood tool names are baked in (ADR-0001 open item). `order_parse`
+  maps agent tool arguments to a `core::Order` strictly (`symbol` + `side` + `quantity`, or
+  `notional` plus a price; `$`/`,` tolerated; floats read via their exact text). The hook's
+  HTTP surface and agent-process supervision land with S9. 25 new tests.
 - **AI decider (S4)** — `[general] decider = "ai"` drives the paper loop with a language
   model instead of the threshold rules. `AiProvider` trait + `OpenAiCompatProvider`
   (`reqwest` + rustls, whole-request timeout) behind the `decision/openai` feature, working

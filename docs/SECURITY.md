@@ -109,9 +109,14 @@ requires the admin role and is audited. Recovery procedure lives in
 Under ADR-0001 Option 3 the `PreToolUse` hook is the only thing between the agent and the
 venue. It is treated as security-critical:
 
-- **Fails closed.** No response, a timeout, or a malformed response means deny.
+- **Fails closed.** No response, a timeout, or a malformed response means deny. The decision
+  core (`sherwood-execution::hook`, landed at S7) also denies on an unparseable payload, an
+  order tool whose arguments do not parse, or any `RiskGate` rejection.
 - **Tool allowlist.** Only explicitly named venue tools are gated *and* permitted; an
-  unrecognised tool name is denied, not passed through.
+  unrecognised tool name is denied, not passed through. The allowlist is configuration — no
+  tool names are compiled in — and each entry is classified read-only / place-order /
+  cancel-order. Only place-order calls are parsed and risk-checked; a cancel is allowed even
+  under a hard stop, since it can only reduce exposure.
 - Authenticated with the local token; an unauthenticated hook call is denied and alerted.
 - Its own timeout must exceed the approval timeout, and the agent's hook timeout must exceed
   both, or a slow human approval is silently converted into a denial.
