@@ -61,6 +61,24 @@ impl Portfolio {
             .map(|(s, q)| (s.as_str(), *q))
     }
 
+    /// Number of distinct symbols with a non-zero position.
+    pub fn open_position_count(&self) -> usize {
+        self.positions().count()
+    }
+
+    /// Mark-to-market unrealized P&L across open positions, given a price
+    /// oracle. Positions without a known price or a recorded average cost
+    /// contribute nothing. Negative means an open loss.
+    pub fn unrealized_pnl(&self, price_of: impl Fn(&str) -> Option<Decimal>) -> Decimal {
+        let mut total = dec!(0);
+        for (sym, qty) in self.positions() {
+            if let (Some(px), Some(cost)) = (price_of(sym), self.avg_cost.get(sym).copied()) {
+                total += qty * (px - cost);
+            }
+        }
+        total
+    }
+
     /// Mark-to-market equity given a price oracle for held assets.
     pub fn equity(&self, price_of: impl Fn(&str) -> Option<Decimal>) -> Decimal {
         let mut total = self.cash;
@@ -142,6 +160,20 @@ mod tests {
         // avg cost now 15; sell 20 @ 25 -> pnl = 20 * (25 - 15) = 200
         p.apply(&fill(Side::Sell, dec!(20), dec!(25)));
         assert_eq!(p.realized_pnl(), dec!(200));
+    }
+
+    #[test]
+    fn unrealized_pnl_marks_open_positions_to_market() {
+        let mut p = Portfolio::new(dec!(10_000));
+        p.apply(&fill(Side::Buy, dec!(10), dec!(10))); // cost 10
+                                                       // price 13 -> 10 * (13 - 10) = +30
+        assert_eq!(
+            p.unrealized_pnl(|s| (s == "ROAR").then_some(dec!(13))),
+            dec!(30)
+        );
+        // no price known -> 0
+        assert_eq!(p.unrealized_pnl(|_| None), dec!(0));
+        assert_eq!(p.open_position_count(), 1);
     }
 
     #[test]

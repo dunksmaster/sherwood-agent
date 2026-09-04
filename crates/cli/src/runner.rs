@@ -17,12 +17,14 @@ use chrono::Utc;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sherwood_core::{
-    Asset, Decision, MarketSnapshot, Order, OrderId, Portfolio, RiskGate, Side, Venue,
+    Asset, Clock, Decision, GateContext, MarketSnapshot, Order, OrderId, Portfolio, RiskGate, Side,
+    SystemClock, Venue,
 };
 use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
 use sherwood_events::{run_subscriber, Bus, Event, TracingSubscriber};
 use sherwood_execution::{Executor, PaperExecutor};
 use sherwood_store::{SqliteStore, Store, StoreSubscriber};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -62,6 +64,7 @@ struct Run<'a> {
     gate: RiskGate,
     shutdown: &'a AtomicBool,
     store: Option<Arc<SqliteStore>>,
+    clock: &'a dyn Clock,
 }
 
 async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
@@ -73,6 +76,7 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         gate,
         shutdown,
         store,
+        clock,
     } = cfg;
 
     let Some(&first) = prices.first() else {
@@ -108,6 +112,7 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
     let exec = PaperExecutor::default();
     let mut prev = first;
     let mut interrupted = false;
+    let mut last_order: HashMap<String, chrono::DateTime<Utc>> = HashMap::new();
 
     for (i, px) in prices.iter().enumerate() {
         if shutdown.load(Ordering::Relaxed) {
@@ -152,10 +157,26 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         }
 
         if let Some(order) = size(&decision, &asset, pos, equity, *px) {
-            match gate.check(&order, &portfolio, Some(*px), equity) {
+            // Scope the immutable borrow of `portfolio` to the gate check so the
+            // fill path below can take `&mut portfolio`.
+            let gate_result = {
+                let unrealized = portfolio.unrealized_pnl(|s| (s == asset.symbol).then_some(*px));
+                let gctx = GateContext {
+                    portfolio: &portfolio,
+                    ref_price: Some(*px),
+                    equity,
+                    unrealized_pnl: unrealized,
+                    last_order_at: last_order.get(&order.asset.symbol).copied(),
+                    now: clock.now(),
+                };
+                gate.check(&order, &gctx)
+            };
+
+            match gate_result {
                 Ok(()) => match exec.execute(&order).await {
                     Ok(fill) => {
                         portfolio.apply(&fill);
+                        last_order.insert(fill.asset.symbol.clone(), clock.now());
                         tracing::info!(
                             side = ?fill.side, qty = %fill.qty, price = %fill.price,
                             cash = %portfolio.cash(), "filled"
@@ -269,6 +290,7 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
             gate,
             shutdown,
             store: None,
+            clock: &SystemClock,
         },
         &RuleDecider::new(RuleConfig::default()),
     )
@@ -300,6 +322,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
             gate,
             shutdown,
             store,
+            clock: &SystemClock,
         },
         &RuleDecider::new(RuleConfig::default()),
     )

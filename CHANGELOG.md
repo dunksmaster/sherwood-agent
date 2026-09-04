@@ -9,6 +9,12 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **`RiskGate` extension (S5)** — hard stops (kill switch, realized daily loss) vs entry
+  limits. New entry limits, all buy-only so a de-risking sell always passes: an
+  **unrealized-loss breaker**, **max concurrent open symbols**, and a **per-symbol buy
+  cooldown**. The gate now takes a `GateContext`; `now` is injected via a new
+  `sherwood_core::Clock` (`SystemClock` / `FixedClock`). `Portfolio` gains
+  `unrealized_pnl` and `open_position_count`. Closes CURRENT-STATE defects 8 and 12.
 - **`sherwood-events` (S3)** — internal bus (`tokio::sync::broadcast`, bounded 1000)
   behind a `Subscriber` trait. Four event variants, each with a real emitter and
   consumer; every message a versioned `Envelope` (ADR-0004). `TracingSubscriber`

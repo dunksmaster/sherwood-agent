@@ -58,19 +58,25 @@ Solana. They are deliberately absent from v0.1 because v0.1 holds no keys.
 
 ## Spend controls
 
-Enforced in `sherwood-core`, independent of any strategy or model, and evaluated on every
-order:
+Enforced in `sherwood-core`'s `RiskGate`, independent of any strategy or model, on every
+order. Two classes:
 
-- Maximum notional per order
-- Maximum notional per day
-- Maximum notional per symbol per day
-- Maximum concurrent open positions
-- Per-symbol cooldown between orders
-- Realized **and unrealized** daily-loss circuit breaker
-- Per-run budgets: maximum orders, maximum notional, maximum duration
+**Hard stops — reject every order, buy or sell:**
 
-Defaults are deliberately small. Raising them is a config change that is recorded in the
-audit log.
+- Kill switch
+- Realized daily-loss circuit breaker
+
+**Entry limits — gate new exposure; a sell that de-risks always passes:**
+
+- Maximum notional per order · maximum position as a fraction of equity
+- **Unrealized-loss breaker** (mark-to-market across open positions)
+- **Maximum concurrent open symbols**
+- **Per-symbol cooldown between buys** (`now` from an injected `Clock`, never the wall clock)
+
+Still to come: per-day and per-symbol-per-day notional caps, per-run budgets (S5/S12).
+
+Defaults are deliberately small. Raising them is a config change that will be recorded in the
+audit log once config lives in the store (S2).
 
 ## Kill switch
 
