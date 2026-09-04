@@ -1,26 +1,27 @@
 //! The decision layer: given market context, produce a [`Decision`].
 //!
-//! Two deciders ship:
+//! * [`RuleDecider`] — transparent, deterministic threshold rules. The default.
+//! * [`AiDecider`] — a language model. It can wrap a caller-supplied closure, or
+//!   an [`AiProvider`] plus [`AiConfig`], in which case this crate owns the
+//!   prompt, the strict-JSON parsing, the injection guard, and the fallback
+//!   chain (see `docs/AI-SAFETY.md`). The concrete HTTP provider,
+//!   [`OpenAiCompatProvider`], is behind the `openai` feature.
 //!
-//! * [`RuleDecider`] — transparent, deterministic threshold rules. Good default,
-//!   fully testable, no external calls.
-//! * [`AiDecider`] — wraps a user-supplied async closure that calls an LLM
-//!   (e.g. the Claude API). This crate does **not** embed an API client or a
-//!   prompt that recommends specific assets; you provide the call and the
-//!   prompt. Its output is still funnelled through the same [`Decision`] type
-//!   and therefore still clamped by the risk gate downstream.
-//!
-//! Whatever a decider returns is advisory. Nothing here places an order; the
-//! runner turns a [`Decision`] into an [`Order`] and the risk gate has the
-//! final say.
+//! Whatever a decider returns is advisory. The runner turns a [`Decision`] into
+//! an [`Order`] and the risk gate has the final say.
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
+
+mod ai;
+
+#[cfg(feature = "openai")]
+pub use ai::OpenAiCompatProvider;
+pub use ai::{AiConfig, AiDecider, AiError, AiProvider};
+
 use async_trait::async_trait;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sherwood_core::{Decision, MarketSnapshot};
-use std::future::Future;
-use std::pin::Pin;
 
 /// Context handed to a decider for one asset on one tick.
 #[derive(Debug, Clone)]
@@ -135,38 +136,6 @@ impl Decider for RuleDecider {
 
     fn name(&self) -> &'static str {
         "rule"
-    }
-}
-
-type AiCall =
-    Box<dyn Fn(&DecisionContext) -> Pin<Box<dyn Future<Output = Decision> + Send>> + Send + Sync>;
-
-/// Adapter around a caller-provided LLM call. The closure owns the API client,
-/// the prompt, and the parsing of the model's reply into a [`Decision`].
-pub struct AiDecider {
-    call: AiCall,
-}
-
-impl AiDecider {
-    pub fn new<F, Fut>(call: F) -> Self
-    where
-        F: Fn(&DecisionContext) -> Fut + Send + Sync + 'static,
-        Fut: Future<Output = Decision> + Send + 'static,
-    {
-        Self {
-            call: Box::new(move |ctx| Box::pin(call(ctx))),
-        }
-    }
-}
-
-#[async_trait]
-impl Decider for AiDecider {
-    async fn decide(&self, ctx: &DecisionContext) -> Decision {
-        (self.call)(ctx).await
-    }
-
-    fn name(&self) -> &'static str {
-        "ai"
     }
 }
 

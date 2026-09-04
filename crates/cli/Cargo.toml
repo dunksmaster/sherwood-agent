@@ -15,7 +15,7 @@ sherwood-store = { path = "../store" }
 sherwood-events = { path = "../events" }
 sherwood-secrets = { path = "../secrets" }
 sherwood-execution = { path = "../execution" }
-sherwood-decision = { path = "../decision" }
+sherwood-decision = { path = "../decision", features = ["openai"] }
 sherwood-copytrade = { path = "../copytrade" }
 sherwood-sniper = { path = "../sniper" }
 anyhow.workspace = true
@@ -27,6 +27,11 @@ toml.workspace = true
 rust_decimal.workspace = true
 rust_decimal_macros.workspace = true
 chrono.workspace = true
+# MSRV pin, not used directly. `reqwest` (via the `decision/openai` feature) pulls
+# `url` -> `idna` -> `idna_adapter`; 1.2.x switched to `icu_normalizer` 2.x, whose
+# MSRV is 1.88 and would break the `MSRV 1.80` CI job. 1.1.x uses `icu_normalizer`
+# 1.5 (MSRV 1.67). Revisit when the workspace MSRV moves past 1.88.
+idna_adapter = "=1.1.0"
 
 [dev-dependencies]
 tempfile.workspace = true

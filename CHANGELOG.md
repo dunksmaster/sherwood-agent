@@ -9,6 +9,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **AI decider (S4)** — `[general] decider = "ai"` drives the paper loop with a language
+  model instead of the threshold rules. `AiProvider` trait + `OpenAiCompatProvider`
+  (`reqwest` + rustls, whole-request timeout) behind the `decision/openai` feature, working
+  against any OpenAI-compatible `/chat/completions` endpoint (NVIDIA NIM, Groq, a local
+  server). The `decision` crate owns the prompt: untrusted market data goes in a
+  `<market_data>` block, the symbol field is scanned for injection markers, output is
+  strict JSON (`deny_unknown_fields`) with a code-fence strip, one retry, then
+  degrade-to-`Hold`. Per-run call budget (`ai.max_calls_per_run`) and an optional symbol
+  `universe`. The API key is a `vault:` reference resolved at load — a literal key in the
+  config is rejected. Every proposal still passes `RiskGate`; the runner stays paper-only.
+  15 new tests. See [docs/AI-SAFETY.md](docs/AI-SAFETY.md).
 - **`sherwood-secrets` (S6)** — a `FileVault`: Argon2id-derived key, XChaCha20-Poly1305 over a
   JSON `name → value` map, passphrase from `$SHERWOOD_VAULT_PASSPHRASE` (`0600` on Unix).
   `SecretString` zeroes on drop and prints `[redacted]`; `resolve_ref` turns `vault:NAME`

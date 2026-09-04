@@ -8,6 +8,23 @@ mode = "paper"
                             # `run` resumes from the last snapshot. Omit = no persistence.
 # feed_path  = "feeds/demo.csv"  # replay a CSV price feed (timestamp,symbol,price rows).
                             # Omit = the built-in two-symbol demo feed.
+decider = "rule"            # "rule" = deterministic thresholds (default).
+                            # "ai"   = language model via [ai] below. Advisory only:
+                            #          RiskGate still checks every resulting order.
+
+[ai]
+# Only read when decider = "ai". The model proposes buy/sell/hold + a fraction;
+# anything unparseable, out of range, or timed out degrades to Hold. See
+# docs/AI-SAFETY.md.
+# base_url          = "https://integrate.api.nvidia.com/v1"  # OpenAI-compatible root, no trailing slash
+# model             = "meta/llama-3.1-70b-instruct"
+# api_key           = "vault:nvidia"   # a vault reference, never a literal key.
+                                       # store it: `sherwood secrets set nvidia`
+# temperature       = 0.2
+# max_tokens        = 300
+# max_calls_per_run = 50               # 0 = unlimited; once hit, every decision is Hold
+# request_timeout_secs = 20
+# universe          = ["ROAR", "HMNI"] # non-empty = the model may only name these
 
 [risk]
 # Every generated order is checked against these before it can be executed.

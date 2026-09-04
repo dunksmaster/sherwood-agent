@@ -1,6 +1,6 @@
 ---
 status: accepted
-last-updated: 2026-09-03
+last-updated: 2026-09-04
 owner-step: S0
 ---
 
@@ -19,13 +19,13 @@ and was verified against the source.
 | `sherwood-secrets` | Encrypted file vault: Argon2id key + XChaCha20-Poly1305 over a JSON `name → value` map; passphrase from `$SHERWOOD_VAULT_PASSPHRASE`; `SecretString` zeroes on drop and prints `[redacted]`; `resolve_ref` turns `vault:NAME` config refs into values. `sherwood secrets set/get/list/rm`. 7 tests incl. wrong-passphrase and tamper detection. | OS keyring backend (behind a feature, when wanted); rotation tooling |
 | `sherwood-events` | Internal bus (`tokio::sync::broadcast`, bounded 1000). `Event` (4 variants, each with a real emitter and consumer), versioned `Envelope`, `Subscriber` trait + `run_subscriber`, `TracingSubscriber`. A slow or failing subscriber is logged, never fatal. 4 unit tests. | Metrics / notification subscribers (S13); supervisor (S3.4–3.5) |
 | `sherwood-execution` | `Executor` trait, deterministic `PaperExecutor` (spread + fee + slippage guard), `LiveExecutor` that always errors. 3 unit tests. | Retry, circuit breaker, order lifecycle beyond a synchronous `Fill` |
-| `sherwood-decision` | `Decider` trait, `RuleDecider` (momentum entry, take-profit, stop-loss, liquidity floor), `AiDecider` wrapping a caller-supplied async closure. 5 unit tests. | No provider client, no prompt, no output schema — **by design**, the closure is the seam |
+| `sherwood-decision` | `Decider` trait; `RuleDecider` (momentum entry, take-profit, stop-loss, liquidity floor); **`AiDecider`** — either a caller-supplied async closure or, via `from_provider`, an `AiProvider` with the crate-owned prompt, `<market_data>` injection guard, strict-JSON parser (`deny_unknown_fields`, fence strip, one retry, degrade-to-Hold), per-run call budget and optional symbol universe. `OpenAiCompatProvider` (`reqwest`/rustls, request timeout) behind the `openai` feature. 20 unit tests. | No cross-run quota manager (S4.7, deferred — per-run budget covers v0.1); Claude/Groq need no separate provider (both OpenAI-compatible) |
 | `sherwood-copytrade` | `TradeFeed` trait, `ObservedTrade`, `CopyTrader` with three sizing modes and sell clamping. 5 unit tests. | No live `TradeFeed` impl. **Not wired into the runner.** Deferred to v0.2 |
 | `sherwood-sniper` | `NewPoolEvent`, `RugScreen` with 7 safety checks, entry-order builder. 4 unit tests. | No pool event source. **Not wired into the runner.** Deferred to v0.2 |
-| `sherwood-cli` | `demo` / `run` / `check`; validated TOML config; paper-only guard; clean Ctrl-C. **Multi-asset run loop** driven by a `PriceFeed` — the built-in two-symbol demo feed, or a **CSV replay** (`feed_path`). Publishes events onto the bus; a tracing subscriber logs them and (with `state_path`) a store subscriber persists them and the loop resumes from the last snapshot. 15 tests. | Live feed (v0.2); copy-trade and sniper config not wired; naive `change_24h` (previous tick, not a real window) |
+| `sherwood-cli` | `demo` / `run` / `check`; validated TOML config; paper-only guard; clean Ctrl-C. **Multi-asset run loop** driven by a `PriceFeed` — the built-in two-symbol demo feed, or a **CSV replay** (`feed_path`). `build_decider` selects `RuleDecider` or the AI decider from `[general] decider`, resolving `ai.api_key` against the vault. Publishes events onto the bus; a tracing subscriber logs them and (with `state_path`) a store subscriber persists them and the loop resumes from the last snapshot. 20 tests. | Live feed (v0.2); copy-trade and sniper config not wired; naive `change_24h` (previous tick, not a real window) |
 
-67 tests pass. `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
-`cargo deny check` (licences + RustSec advisories + bans + sources) are all clean. CI runs
+82 tests pass. `cargo fmt --check`, `cargo clippy --all-targets --all-features -- -D warnings`,
+and `cargo deny check` (licences + RustSec advisories + bans + sources) are all clean. CI runs
 those plus an MSRV 1.80 build, a CycloneDX SBOM, `gitleaks`, a coverage report, and a
 doc-link check. `sqlx` queries are compile-time-checked against the committed `.sqlx/`
 offline cache, so CI needs no database.
@@ -48,7 +48,7 @@ Severity is relative to shipping v0.1.
 | 1 | ~~No persistence layer~~ | ~~Blocker~~ | **Closed (S1):** `sherwood-store` on SQLite. `Portfolio` is `serde`-serialisable; `run` with `state_path` snapshots it, records fills, and resumes on restart. A kill-and-restart test proves the round-trip. Multi-node / Postgres is a later concern. |
 | 2 | ~~No real data feed~~ | ~~Blocker~~ | **Closed (S5):** `PriceFeed` trait in `core`; `CsvFeed` replays `timestamp,symbol,price` rows, `SliceFeed` replays in memory. `run` uses `feed_path` or the built-in demo feed. A live websocket/Geyser feed is v0.2. |
 | 3 | ~~Hardcoded single asset~~ | ~~Blocker~~ | **Closed (S5):** the loop is multi-asset — the feed defines the universe (one symbol per tick), equity and unrealized P&L mark against the latest price per held symbol. The demo feed trades two. |
-| 4 | Config is parsed but largely unused | **Blocker** | `run()` reads `starting_cash` and the risk section; copy-trade leaders and sniper settings are logged and discarded. |
+| 4 | Config partly unused | **High** | `run()` consumes `general` (incl. `decider` + the `[ai]` section), the risk section, `state_path` and `feed_path`. Copy-trade leaders and sniper settings are still logged and discarded — both are v0.2. |
 | 5 | Strategies not wired | **Blocker** | `CopyTrader` and `RugScreen` are library-only. Neither is reachable from the binary. |
 | 6 | ~~No event bus~~ | ~~Blocker~~ | **Closed (S3):** `sherwood-events` — bounded `broadcast`, versioned envelopes, `Subscriber` trait. The run loop publishes; `TracingSubscriber` and `StoreSubscriber` consume. Adding metrics or notifications is a new subscriber, no producer change. Supervisor (config-driven startup) deferred to S4 — nothing to supervise yet. |
 | 7 | ~~No audit log~~ | ~~High~~ | **Closed (S1):** hash-chained `audit_log` in `sherwood-store`, fed via the bus (S3). `verify_audit_chain` walks from genesis and pinpoints the first altered row. A tamper test confirms detection. External anchoring of the head is a later hardening task. |
@@ -60,9 +60,8 @@ Severity is relative to shipping v0.1.
 | 13 | Order lifecycle is synchronous | Medium | `Executor::execute` returns a `Fill` immediately. A real venue returns an order id whose status must be polled. |
 | 14 | ~~No shutdown flush of the ledger~~ | ~~Medium~~ | **Closed (S1):** when `state_path` is set, `run` snapshots the portfolio and writes a `run_end` audit event on exit, including on a clean interrupt. |
 
-Items 4 (copy-trade/sniper config unused) and 5 (strategies not wired) remain — copy-trade
-and sniper are v0.2. Items 11 and 13 are addressed in S7. Everything else in this table has
-been closed across S0–S5.
+Items 4 and 5 now concern only copy-trade and sniper, which are v0.2. Items 11 and 13 are
+addressed in S7. Everything else in this table has been closed across S0–S6.
 
 Also fixed in Pre-S0: `PaperExecutor` recovers from a poisoned mutex instead of unwrapping,
 and `run_loop` guards an empty price series instead of indexing.
