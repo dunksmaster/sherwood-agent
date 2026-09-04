@@ -29,8 +29,10 @@ Prints a per-token report and exits non-zero if any token's transfers are
 restricted or the probe was inconclusive. This is the same check live mode must
 run before it arms.
 
-## Next (v0.2.1+)
+## Next (v0.2.1b)
 
 Uniswap v4 pool reads → a Stock Token price → the existing
 `sherwood_core::PriceFeed`, so the paper engine and backtester run on live
-on-chain data. No wallet, still all reads.
+on-chain data. No wallet, still all reads. Verified addresses and the
+`sqrtPriceX96` → price recipe are in
+[`docs/ROBINHOOD-CHAIN.md`](../../docs/ROBINHOOD-CHAIN.md).
