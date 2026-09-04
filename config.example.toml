@@ -58,8 +58,13 @@ entry_notional        = 50
 # `sherwood serve` — the local control-plane HTTP API. Loopback only; a public
 # bind needs TLS and is refused.
 bind      = "127.0.0.1:8787"
-token_ref = "vault:api_token"   # generated into the vault on first `serve` if absent;
-                                # read it with `sherwood secrets get api_token`
+token_ref = "vault:api_token"   # the ADMIN token. Generated into the vault on first
+                                # `serve` if absent; read with `sherwood secrets get api_token`.
+# operator_token_ref = "vault:api_token_operator"  # optional; may use the hook, not the toggles
+# viewer_token_ref   = "vault:api_token_viewer"    # optional; read-only
+allow_live         = false      # true = an admin may switch the server to LIVE mode at
+                                # runtime (admin token + body re-auth). The bundled runner
+                                # is paper-only regardless.
 
 [hook]
 # The PreToolUse order gate (ADR-0001 Option 3). Only tools listed here may be

@@ -9,6 +9,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **RBAC, PAPER/LIVE toggle, kill switch (S9b)** — `sherwood-server` gains three roles
+  (`viewer` < `operator` < `admin`), assigned by which configured token authenticates
+  (`token_ref` = admin; optional `operator_token_ref` / `viewer_token_ref`). `require_auth`
+  middleware stamps the role; each route declares its minimum via a `Caller` extractor. New
+  routes: `GET /v1/control` (viewer), `POST /v1/mode` and `POST /v1/kill` — both admin **and**
+  the admin token again in the request body (`reauth`). LIVE mode is refused unless
+  `[server] allow_live = true`. The kill switch flips `RiskConfig.kill_switch` under an
+  `RwLock<Control>`, so an engaged switch immediately makes `POST /v1/hook/pretooluse` deny
+  every order. `/v1/health` now reports `kill_switch`.
 - **`sherwood-server` skeleton + `sherwood serve` (S9a)** — the local control-plane HTTP API.
   axum bound to loopback (a non-loopback bind is refused — TLS is a later concern); one
   `{ code, message, correlation_id }` error envelope on every failure; bearer-token auth

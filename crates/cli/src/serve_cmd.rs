@@ -1,6 +1,6 @@
 //! `sherwood serve` — start the local control-plane HTTP API.
 //!
-//! Loads the config, resolves (or on first run generates) the bearer token in
+//! Loads the config, resolves (or on first run generates) the role tokens in
 //! the vault, builds the `PreToolUse` hook state from `[risk]` + `[hook]`, and
 //! serves until Ctrl-C.
 
@@ -8,12 +8,31 @@ use crate::config::AppConfig;
 use crate::secrets_cmd;
 use anyhow::{anyhow, Context, Result};
 use sherwood_core::RiskGate;
-use sherwood_server::auth::{ApiToken, TokenOrigin};
+use sherwood_secrets::SecretsVault;
+use sherwood_server::auth::{ApiToken, TokenOrigin, TokenSet};
 use sherwood_server::AppState;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+
+fn vault_name(reference: &str) -> &str {
+    reference.strip_prefix("vault:").unwrap_or(reference).trim()
+}
+
+/// Load a role token, generating it into the vault on first use. Announces a
+/// freshly minted token once, on stderr.
+fn resolve_token(vault: &dyn SecretsVault, reference: &str, role: &str) -> Result<ApiToken> {
+    let name = vault_name(reference);
+    let (token, origin) = ApiToken::load_or_create(vault, name).map_err(|e| anyhow!("{e}"))?;
+    if origin == TokenOrigin::Created {
+        eprintln!(
+            "generated a new {role} API token, stored as `{name}` in the vault.\n\
+             retrieve it with:  sherwood secrets get {name}"
+        );
+    }
+    Ok(token)
+}
 
 pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
     let addr: SocketAddr = cfg
@@ -22,22 +41,22 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         .parse()
         .context("server.bind (already validated on load)")?;
 
-    let vault = secrets_cmd::open_vault().context("opening the vault for the API token")?;
-    let token_name = cfg
-        .server
-        .token_ref
-        .strip_prefix("vault:")
-        .unwrap_or(&cfg.server.token_ref)
-        .trim();
+    let vault = secrets_cmd::open_vault().context("opening the vault for the API tokens")?;
 
-    let (token, origin) =
-        ApiToken::load_or_create(&vault, token_name).map_err(|e| anyhow!("{e}"))?;
-    if origin == TokenOrigin::Created {
-        eprintln!(
-            "generated a new API token and stored it as `{token_name}` in the vault.\n\
-             retrieve it with:  sherwood secrets get {token_name}"
-        );
-    }
+    let admin = resolve_token(&vault, &cfg.server.token_ref, "admin")?;
+    let operator = cfg
+        .server
+        .operator_token_ref
+        .as_deref()
+        .map(|r| resolve_token(&vault, r, "operator"))
+        .transpose()?;
+    let viewer = cfg
+        .server
+        .viewer_token_ref
+        .as_deref()
+        .map(|r| resolve_token(&vault, r, "viewer"))
+        .transpose()?;
+    let tokens = TokenSet::new(admin, operator, viewer);
 
     let allowlist = cfg.hook.to_allowlist();
     if allowlist.is_empty() {
@@ -46,8 +65,16 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
              Add read_tools / place_tools / cancel_tools to the config."
         );
     }
+    if cfg.server.allow_live {
+        tracing::warn!("[server] allow_live = true — an admin can switch this server to LIVE mode");
+    }
 
-    let state = AppState::new(token, RiskGate::new(cfg.risk.to_core()), allowlist);
+    let state = AppState::new(
+        tokens,
+        RiskGate::new(cfg.risk.to_core()),
+        allowlist,
+        cfg.server.allow_live,
+    );
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {
