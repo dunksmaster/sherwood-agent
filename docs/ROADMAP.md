@@ -226,7 +226,8 @@ over. `RiskGate` / approvals / budgets / audit / server / dashboard are unchange
 | Milestone | Crate / work | Notes |
 |---|---|---|
 | v0.2.0 | `rhc-probe` + ADR-0006 | done — venue verified, rescope accepted |
-| v0.2.1 | `sherwood-chain` — EVM JSON-RPC client (`alloy`), chain `4663` | **read half first**: connect, read a Uniswap v4 pool, derive a Stock Token price, feed the existing `PriceFeed` trait. No wallet, no signing. Also unlocks on-chain history for the backtester (supersedes S14b's quote loader). |
+| v0.2.1a | `sherwood-chain` — read-only EVM JSON-RPC client | **done** — `EvmClient`/`HttpClient`, keccak + ABI codec, `Erc20` view, `probe::check_transfer_open` (the pre-flight, in Rust), `sherwood chain-probe` CLI. Hand-rolled JSON-RPC over `reqwest` (not `alloy` — its MSRV exceeds the workspace's 1.80). No wallet, no signing. |
+| v0.2.1b | `sherwood-chain` — Uniswap v4 pool reads → Stock Token price → `PriceFeed` | next: connect a v4 pool, derive a price, feed the existing paper engine + backtester. Still all reads. Supersedes S14b's quote loader. |
 | v0.2.2 | `sherwood-signer` — secp256k1 keys from the vault, sign-local / broadcast-explicit | threat-model signing section lands with this |
 | v0.2.3 | `sherwood-wallets` — multi-wallet registry, per-strategy binding, spend ceilings | shape unchanged from the Solana draft; EVM addresses |
 | v0.2.4 | `sherwood-dex` — Uniswap v4 quote + swap construction on Robinhood Chain | `slippage` / `deadline` / `minOut`; quote path usable in paper mode |

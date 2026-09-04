@@ -8,6 +8,20 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
+### Added
+- **`sherwood-chain` — read-only EVM client (v0.2.1a).** New crate: an
+  `EvmClient` trait over JSON-RPC (`HttpClient` on `reqwest`) with the reads
+  sherwood needs — `eth_chainId` / `eth_blockNumber` / `eth_call` / `eth_getCode`
+  / `eth_getStorageAt` / `eth_getLogs` — plus `keccak256` + selectors, a minimal
+  ABI codec, an `Erc20` view (metadata + balances scaled to `Decimal`), and
+  `probe::check_transfer_open` — the [ADR-0006](docs/adr/0006-robinhood-chain-venue.md)
+  pre-flight in Rust: simulate a `transfer` to a fresh un-onboarded address and
+  confirm the token is not allowlist-gated. **No signing, no sends** — there is
+  no method that takes a private key. New `sherwood chain-probe [rpc] [token …]`
+  subcommand runs it (verified end-to-end against Robinhood Chain mainnet:
+  `chainId 4663`, NVDA transfers permissionless). 21 unit tests over a mock
+  transport. Deps added: `sha3`, `keccak` (both MIT/Apache, MSRV-safe).
+
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**
   The Robinhood Agentic Trading MCP is US/EEA-gated and unavailable to the operator, so v0.2's
