@@ -1,24 +1,25 @@
 //! Wires the pieces together for a paper run.
 //!
-//! Flow per tick:
-//!   market snapshot -> Decider -> Decision -> size into Order
+//! Per tick from the [`PriceFeed`]:
+//!   set price -> Decider -> Decision -> size into Order
 //!     -> RiskGate::check -> PaperExecutor::execute -> Portfolio::apply
 //!     -> publish events
 //!
-//! The risk gate is unconditional. The run loop publishes [`Event`]s onto a
-//! [`Bus`]; subscribers persist them and log them. The run loop itself never
-//! calls the store to record a fill — it publishes, and the store's subscriber
-//! writes. The portfolio *snapshot* is the exception: the loop owns that state,
-//! so it writes it directly before announcing the run has ended.
+//! The loop is multi-asset: the feed defines the universe, one symbol per tick.
+//! Equity and unrealized P&L are marked against the latest price seen for every
+//! held symbol. The loop publishes [`Event`]s onto a [`Bus`]; subscribers
+//! persist and log them. The portfolio *snapshot* is written to the store
+//! directly — the loop owns that state.
 
 use crate::config::AppConfig;
+use crate::feed::{CsvFeed, SliceFeed};
 use anyhow::Result;
-use chrono::Utc;
+use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sherwood_core::{
-    Asset, Clock, Decision, GateContext, MarketSnapshot, Order, OrderId, Portfolio, RiskGate, Side,
-    SystemClock, Venue,
+    Asset, Clock, Decision, GateContext, MarketSnapshot, Order, OrderId, Portfolio, PriceFeed,
+    RiskGate, Side, SystemClock, Tick, Venue,
 };
 use sherwood_decision::{Decider, DecisionContext, RuleConfig, RuleDecider};
 use sherwood_events::{run_subscriber, Bus, Event, TracingSubscriber};
@@ -30,20 +31,46 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 
-/// A tiny synthetic price path so `demo` and `run` do something visible without
-/// a network feed. Real deployments replace this with a live data source.
-fn synthetic_series(base: Decimal) -> Vec<Decimal> {
-    let steps = [
+/// A two-symbol synthetic replay so `demo` (and `run` without a `feed_path`) do
+/// something visible without a data source. Real deployments point at a CSV or,
+/// later, a live feed.
+fn demo_feed() -> Vec<Tick> {
+    let roar = [
         dec!(0.00),
         dec!(0.03),
-        dec!(0.07), // momentum entry trips here
+        dec!(0.07),
         dec!(0.12),
         dec!(0.19),
-        dec!(0.24), // take-profit
+        dec!(0.24),
         dec!(0.10),
         dec!(-0.05),
     ];
-    steps.iter().map(|d| base * (dec!(1) + *d)).collect()
+    let hmni = [
+        dec!(0.00),
+        dec!(0.01),
+        dec!(0.08),
+        dec!(0.10),
+        dec!(0.12),
+        dec!(0.05),
+        dec!(-0.05),
+        dec!(-0.15),
+    ];
+    let base = DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap_or_default();
+    let mut ticks = Vec::with_capacity(roar.len() * 2);
+    for (i, (r, h)) in roar.iter().zip(hmni).enumerate() {
+        let at = base + Duration::minutes(i as i64);
+        ticks.push(Tick {
+            at,
+            symbol: "ROAR".into(),
+            price: dec!(100) * (dec!(1) + *r),
+        });
+        ticks.push(Tick {
+            at,
+            symbol: "HMNI".into(),
+            price: dec!(10) * (dec!(1) + h),
+        });
+    }
+    ticks
 }
 
 fn decision_tag(d: &Decision) -> &'static str {
@@ -54,12 +81,11 @@ fn decision_tag(d: &Decision) -> &'static str {
     }
 }
 
-/// Everything a paper run needs except the decider (which stays a separate
-/// argument so it can be a trait object).
+/// Everything a paper run needs except the decider (a separate argument so it
+/// can be a trait object).
 struct Run<'a> {
     label: &'a str,
-    asset: Asset,
-    prices: Vec<Decimal>,
+    feed: Box<dyn PriceFeed>,
     starting_cash: Decimal,
     gate: RiskGate,
     shutdown: &'a AtomicBool,
@@ -70,8 +96,7 @@ struct Run<'a> {
 async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
     let Run {
         label,
-        asset,
-        prices,
+        mut feed,
         starting_cash,
         gate,
         shutdown,
@@ -79,13 +104,6 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         clock,
     } = cfg;
 
-    let Some(&first) = prices.first() else {
-        anyhow::bail!("price series is empty");
-    };
-
-    // Bus + subscribers. The tracing subscriber is always attached; the store
-    // subscriber only when there is a store. Both are `await`ed on shutdown so
-    // their writes flush before the process exits.
     let bus = Bus::new(1000);
     let mut subs: Vec<JoinHandle<()>> = vec![tokio::spawn(run_subscriber(
         bus.subscribe(),
@@ -110,63 +128,73 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
     };
 
     let exec = PaperExecutor::default();
-    let mut prev = first;
     let mut interrupted = false;
-    let mut last_order: HashMap<String, chrono::DateTime<Utc>> = HashMap::new();
+    let mut latest: HashMap<String, Decimal> = HashMap::new();
+    let mut prev: HashMap<String, Decimal> = HashMap::new();
+    let mut last_order: HashMap<String, DateTime<Utc>> = HashMap::new();
+    let mut tick_no: u32 = 0;
 
-    for (i, px) in prices.iter().enumerate() {
+    while let Some(tick) = feed.next_tick() {
         if shutdown.load(Ordering::Relaxed) {
-            tracing::warn!(tick = i, "shutdown requested — stopping cleanly");
+            tracing::warn!(tick = tick_no, "shutdown requested — stopping cleanly");
             interrupted = true;
             break;
         }
-        exec.set_price(asset.symbol.clone(), *px);
-        let change_24h = if prev > dec!(0) {
-            (*px - prev) / prev
+
+        let sym = tick.symbol.clone();
+        let px = tick.price;
+        let asset = tick.asset();
+        exec.set_price(sym.clone(), px);
+
+        let last_seen = prev.get(&sym).copied().unwrap_or(px);
+        let change_24h = if last_seen > dec!(0) {
+            (px - last_seen) / last_seen
         } else {
             dec!(0)
         };
 
+        latest.insert(sym.clone(), px);
+        let price_of = |s: &str| latest.get(s).copied();
+
         let pos = portfolio.position(&asset);
-        let equity = portfolio.equity(|s| (s == asset.symbol).then_some(*px));
+        let equity = portfolio.equity(price_of);
         let ctx = DecisionContext {
             snapshot: MarketSnapshot {
                 asset: asset.clone(),
-                price: *px,
+                price: px,
                 change_24h,
                 liquidity: Some(dec!(250_000)),
-                at: Utc::now(),
+                at: tick.at,
             },
             position: pos,
             avg_cost: portfolio.avg_cost(&asset),
             position_fraction: if equity > dec!(0) {
-                pos * *px / equity
+                pos * px / equity
             } else {
                 dec!(0)
             },
         };
 
         let decision = decider.decide(&ctx).await;
-        tracing::info!(tick = i, price = %px, ?decision, "decided");
+        tracing::info!(tick = tick_no, symbol = %sym, price = %px, ?decision, "decided");
         if !matches!(decision, Decision::Hold { .. }) {
             bus.publish(Event::Decided {
-                tick: i as u32,
-                price: *px,
+                tick: tick_no,
+                price: px,
                 decision: decision_tag(&decision).to_string(),
             });
         }
 
-        if let Some(order) = size(&decision, &asset, pos, equity, *px) {
-            // Scope the immutable borrow of `portfolio` to the gate check so the
-            // fill path below can take `&mut portfolio`.
+        if let Some(order) = size(&decision, &asset, pos, equity, px) {
+            // Scope the immutable borrow of `portfolio` to the gate check.
             let gate_result = {
-                let unrealized = portfolio.unrealized_pnl(|s| (s == asset.symbol).then_some(*px));
+                let unrealized = portfolio.unrealized_pnl(price_of);
                 let gctx = GateContext {
                     portfolio: &portfolio,
-                    ref_price: Some(*px),
+                    ref_price: Some(px),
                     equity,
                     unrealized_pnl: unrealized,
-                    last_order_at: last_order.get(&order.asset.symbol).copied(),
+                    last_order_at: last_order.get(&sym).copied(),
                     now: clock.now(),
                 };
                 gate.check(&order, &gctx)
@@ -183,10 +211,10 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
                         );
                         bus.publish(Event::OrderFilled(fill));
                     }
-                    Err(e) => tracing::warn!(tick = i, "executor rejected order: {e}"),
+                    Err(e) => tracing::warn!(tick = tick_no, "executor rejected order: {e}"),
                 },
                 Err(e) => {
-                    tracing::warn!(tick = i, "risk gate blocked order: {e}");
+                    tracing::warn!(tick = tick_no, "risk gate blocked order: {e}");
                     bus.publish(Event::RiskRejected {
                         order_id: order.id.clone(),
                         symbol: order.asset.symbol.clone(),
@@ -195,13 +223,12 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
                 }
             }
         }
-        prev = *px;
+
+        prev.insert(sym, px);
+        tick_no += 1;
     }
 
-    // The loop invariant leaves `prev` holding the last processed price (the
-    // series is non-empty, guarded above).
-    let last = prev;
-    let equity = portfolio.equity(|s| (s == asset.symbol).then_some(last));
+    let equity = portfolio.equity(|s| latest.get(s).copied());
     let state = if interrupted { "interrupted" } else { "done" };
 
     if let Some(s) = &store {
@@ -214,16 +241,15 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         realized_pnl: portfolio.realized_pnl(),
     });
 
-    // Close the bus and wait for subscribers to drain their backlog.
     drop(bus);
     for h in subs {
         h.await?;
     }
 
     println!(
-        "[{label}] {state}. cash={} position={} equity={} realized_pnl={}",
+        "[{label}] {state}. cash={} open_positions={} equity={} realized_pnl={}",
         portfolio.cash(),
-        portfolio.position(&asset),
+        portfolio.open_position_count(),
         equity,
         portfolio.realized_pnl()
     );
@@ -242,13 +268,19 @@ fn size(
     if price <= dec!(0) {
         return None;
     }
+    let id = || {
+        OrderId::new(format!(
+            "d-{}-{}",
+            asset.symbol,
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ))
+    };
     match decision {
         Decision::Hold { .. } => None,
         Decision::Buy { fraction, reason } => {
-            let notional = equity * *fraction;
-            let qty = notional / price;
+            let qty = (equity * *fraction) / price;
             (qty > dec!(0)).then(|| Order {
-                id: OrderId::new(format!("d-{}", Utc::now().timestamp_millis())),
+                id: id(),
                 asset: asset.clone(),
                 side: Side::Buy,
                 qty,
@@ -261,7 +293,7 @@ fn size(
         Decision::Sell { fraction, reason } => {
             let qty = position * *fraction;
             (qty > dec!(0)).then(|| Order {
-                id: OrderId::new(format!("d-{}", Utc::now().timestamp_millis())),
+                id: id(),
                 asset: asset.clone(),
                 side: Side::Sell,
                 qty,
@@ -275,7 +307,6 @@ fn size(
 }
 
 pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
-    let asset = Asset::symbol("ROAR");
     let gate = RiskGate::new(sherwood_core::RiskConfig {
         max_order_notional: dec!(10_000),
         max_position_fraction: dec!(0.50),
@@ -284,8 +315,7 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
     run_loop(
         Run {
             label: "demo",
-            asset,
-            prices: synthetic_series(dec!(100)),
+            feed: Box::new(SliceFeed::new(demo_feed())),
             starting_cash: dec!(1_000),
             gate,
             shutdown,
@@ -299,13 +329,11 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
 
 pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     tracing::info!(
-        "paper run: starting_cash={} leaders={} sniper_enabled={} state_path={:?}",
+        "paper run: starting_cash={} state_path={:?} feed_path={:?}",
         cfg.general.starting_cash,
-        cfg.copytrade.leaders.len(),
-        cfg.sniper.enabled,
         cfg.general.state_path,
+        cfg.general.feed_path,
     );
-    let asset = Asset::symbol("ROAR");
     let gate = RiskGate::new(cfg.risk.to_core());
 
     let store = match &cfg.general.state_path {
@@ -313,11 +341,15 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
         None => None,
     };
 
+    let feed: Box<dyn PriceFeed> = match &cfg.general.feed_path {
+        Some(path) => Box::new(CsvFeed::open(path)?),
+        None => Box::new(SliceFeed::new(demo_feed())),
+    };
+
     run_loop(
         Run {
             label: "run",
-            asset,
-            prices: synthetic_series(dec!(100)),
+            feed,
             starting_cash: cfg.general.starting_cash,
             gate,
             shutdown,
@@ -336,10 +368,11 @@ async fn open_store(path: &Path) -> Result<SqliteStore> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sherwood_core::FixedClock;
 
     #[tokio::test]
     async fn stops_early_when_shutdown_is_set() {
-        let flag = AtomicBool::new(true); // already requested
+        let flag = AtomicBool::new(true);
         demo(&flag).await.unwrap();
     }
 
@@ -350,15 +383,68 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_persists_state_and_audits_the_chain_via_the_bus() {
+    async fn run_loop_trades_multiple_symbols_through_the_store() {
         let dir = tempfile::tempdir().unwrap();
         let db = dir.path().join("state.db");
+        let store = Arc::new(SqliteStore::open(&db).await.unwrap());
+        let flag = AtomicBool::new(false);
+        let clock = FixedClock(DateTime::<Utc>::from_timestamp(1_700_000_000, 0).unwrap());
+
+        run_loop(
+            Run {
+                label: "t",
+                feed: Box::new(SliceFeed::new(demo_feed())),
+                starting_cash: dec!(1000),
+                gate: RiskGate::new(sherwood_core::RiskConfig {
+                    max_order_notional: dec!(10_000),
+                    max_position_fraction: dec!(0.5),
+                    ..Default::default()
+                }),
+                shutdown: &flag,
+                store: Some(store.clone()),
+                clock: &clock,
+            },
+            &RuleDecider::new(RuleConfig::default()),
+        )
+        .await
+        .unwrap();
+
+        let fills = store.fills().await.unwrap();
+        let symbols: std::collections::HashSet<&str> =
+            fills.iter().map(|f| f.asset.symbol.as_str()).collect();
+        assert!(
+            symbols.contains("ROAR") && symbols.contains("HMNI"),
+            "both symbols traded, got {symbols:?}"
+        );
+        assert!(matches!(
+            store.verify_audit_chain().await.unwrap(),
+            sherwood_store::AuditVerification::Ok { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn run_from_a_csv_feed_persists_and_verifies() {
+        let dir = tempfile::tempdir().unwrap();
+        let db = dir.path().join("state.db");
+        let feed = dir.path().join("feed.csv");
+        std::fs::write(
+            &feed,
+            "timestamp,symbol,price\n\
+             2026-01-01T00:00:00Z,ROAR,100\n\
+             2026-01-01T00:01:00Z,ROAR,103\n\
+             2026-01-01T00:02:00Z,ROAR,110\n\
+             2026-01-01T00:03:00Z,ROAR,120\n\
+             2026-01-01T00:04:00Z,ROAR,132\n\
+             2026-01-01T00:05:00Z,ROAR,95\n",
+        )
+        .unwrap();
 
         let cfg = AppConfig {
             general: crate::config::General {
                 starting_cash: dec!(1000),
                 mode: "paper".into(),
                 state_path: Some(db.clone()),
+                feed_path: Some(feed),
             },
             risk: crate::config::RiskSection {
                 max_order_notional: dec!(10_000),
@@ -369,25 +455,15 @@ mod tests {
             sniper: Default::default(),
         };
 
-        let flag = AtomicBool::new(false);
-        run(cfg, &flag).await.unwrap();
+        run(cfg, &AtomicBool::new(false)).await.unwrap();
 
-        // Re-open independently and confirm the run left durable, verifiable state.
         let s = SqliteStore::open(&db).await.unwrap();
-        let p = s.load_portfolio().await.unwrap().expect("a snapshot");
-        assert!(
-            p.realized_pnl() != dec!(0),
-            "the demo series closes a position"
-        );
-        assert!(!s.fills().await.unwrap().is_empty(), "fills were recorded");
-        assert!(
-            matches!(
-                s.verify_audit_chain().await.unwrap(),
-                sherwood_store::AuditVerification::Ok { .. }
-            ),
-            "audit chain verifies"
-        );
-        let tail = s.audit_tail(1).await.unwrap();
-        assert_eq!(tail[0].kind, "run_end");
+        assert!(s.load_portfolio().await.unwrap().is_some());
+        assert!(!s.fills().await.unwrap().is_empty());
+        assert!(matches!(
+            s.verify_audit_chain().await.unwrap(),
+            sherwood_store::AuditVerification::Ok { .. }
+        ));
+        assert_eq!(s.audit_tail(1).await.unwrap()[0].kind, "run_end");
     }
 }

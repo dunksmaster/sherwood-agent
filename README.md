@@ -80,7 +80,7 @@ Full detail, including the event bus and error taxonomy, is in
 ```
 sherwood-agent/
 ├── crates/
-│   ├── core/         domain types, Portfolio, RiskGate  (no I/O)
+│   ├── core/         domain types, Portfolio, RiskGate, Clock, PriceFeed  (no I/O)
 │   ├── store/        SQLite persistence + hash-chained audit log (sqlx)
 │   ├── events/       internal event bus (broadcast) + Subscriber trait
 │   ├── execution/    Executor trait, PaperExecutor, LiveExecutor stub
@@ -90,6 +90,7 @@ sherwood-agent/
 │   └── cli/          the `sherwood` binary
 ├── .sqlx/            committed sqlx offline query cache (CI uses this)
 ├── docs/             the plan, standards, security, ADRs — start at docs/README.md
+├── feeds/            sample CSV price feeds for `sherwood run --feed_path`
 ├── config.example.toml
 └── rust-toolchain.toml
 ```
@@ -121,7 +122,7 @@ cd sherwood-agent
 # 2. Test
 cargo test
 
-# 3. Run the wiring demo — a synthetic price series through
+# 3. Run the built-in two-symbol demo feed through
 #    RuleDecider → RiskGate → PaperExecutor, printing the ledger
 cargo run -p sherwood-cli -- demo
 
@@ -129,11 +130,13 @@ cargo run -p sherwood-cli -- demo
 cp config.example.toml config.toml
 cargo run -p sherwood-cli -- check config.toml
 
-# 5. Run against the config (paper only)
+# 5. Run against the config (paper only). Set `feed_path` to replay a CSV
+#    (timestamp,symbol,price) and `state_path` to persist + resume.
 cargo run -p sherwood-cli -- run config.toml
 ```
 
-`demo` is a wiring demonstration, not a backtest. There is no real data feed yet — see
+`demo` replays a synthetic two-symbol series — a wiring demonstration, not a backtest. A
+real backtest harness and a live feed are still ahead; see
 [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
 
 ## Project status

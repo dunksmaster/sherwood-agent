@@ -6,6 +6,8 @@ starting_cash = 1000
 mode = "paper"
 # state_path = "state.db"   # persist portfolio + fills + audit log to SQLite;
                             # `run` resumes from the last snapshot. Omit = no persistence.
+# feed_path  = "feeds/demo.csv"  # replay a CSV price feed (timestamp,symbol,price rows).
+                            # Omit = the built-in two-symbol demo feed.
 
 [risk]
 # Every generated order is checked against these before it can be executed.
