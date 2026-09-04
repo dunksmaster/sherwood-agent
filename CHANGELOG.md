@@ -8,6 +8,19 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.1.0] - 2026-09-04
+
+First feature-complete **paper** release. An agentic-trading control plane: a
+deterministic engine, a fail-closed risk gate, a human-in-the-loop approval
+gate, per-session spend budgets, an encrypted secret vault, a loopback HTTP API
+with a React dashboard, a hash-chained tamper-evident audit log, a backtester,
+and Prometheus metrics. **No live-venue path** — the Robinhood MCP adapter,
+order reconciliation, and session reconnection are v0.2 (see
+[ROADMAP.md](docs/ROADMAP.md) and the [threat-model
+sign-off](docs/THREAT-MODEL.md#sign-off)).
+
 ### Added
 - **Runtime config reload (S2.2)** — `POST /v1/config/reload` (admin + body re-auth)
   re-reads and re-validates `config.toml`, then swaps in the new `[risk]` config, `[hook]`
@@ -36,19 +49,6 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   `max_position_fraction`; and a de-risking sell within the notional cap always passes once
   the hard stops are clear. The machine-checked form of the invariants in `SECURITY.md` /
   `AI-SAFETY.md`. (Seeded RNG is N/A — the paper path uses no randomness.)
-
-## [0.1.0] - 2026-09-04
-
-First feature-complete **paper** release. An agentic-trading control plane: a
-deterministic engine, a fail-closed risk gate, a human-in-the-loop approval
-gate, per-session spend budgets, an encrypted secret vault, a loopback HTTP API
-with a React dashboard, a hash-chained tamper-evident audit log, a backtester,
-and Prometheus metrics. **No live-venue path** — the Robinhood MCP adapter,
-order reconciliation, and session reconnection are v0.2 (see
-[ROADMAP.md](docs/ROADMAP.md) and the [threat-model
-sign-off](docs/THREAT-MODEL.md#sign-off)).
-
-### Added
 - **Docker + deployment docs + threat-model sign-off (S15b)** — a multi-stage `Dockerfile`
   (Rust build → dashboard build → `debian:bookworm-slim` runtime, non-root, stripped) and a
   `docker-compose.yml` that runs `serve` with `network_mode: host` (the server is
