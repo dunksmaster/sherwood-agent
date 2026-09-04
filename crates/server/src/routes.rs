@@ -82,15 +82,32 @@ pub async fn metrics(State(state): State<AppState>) -> impl IntoResponse {
         let c = state.control.read().await;
         (c.mode, c.kill_switch())
     };
+    let b = state.budget.view();
     let extra = format!(
         "# HELP sherwood_kill_switch 1 if the kill switch is engaged.\n\
          # TYPE sherwood_kill_switch gauge\n\
-         sherwood_kill_switch {}\n\
+         sherwood_kill_switch {kill}\n\
          # HELP sherwood_mode_live 1 if the server is in LIVE mode.\n\
          # TYPE sherwood_mode_live gauge\n\
-         sherwood_mode_live {}\n",
-        u8::from(kill),
-        u8::from(mode == Mode::Live),
+         sherwood_mode_live {live}\n\
+         # HELP sherwood_approvals_pending Orders currently awaiting operator approval.\n\
+         # TYPE sherwood_approvals_pending gauge\n\
+         sherwood_approvals_pending {pending}\n\
+         # HELP sherwood_session_orders_used Place-orders allowed this session.\n\
+         # TYPE sherwood_session_orders_used counter\n\
+         sherwood_session_orders_used {orders}\n\
+         # HELP sherwood_session_notional_used Cumulative notional allowed this session.\n\
+         # TYPE sherwood_session_notional_used gauge\n\
+         sherwood_session_notional_used {notional}\n\
+         # HELP sherwood_session_budget_breached 1 if a per-session budget cap has latched.\n\
+         # TYPE sherwood_session_budget_breached gauge\n\
+         sherwood_session_budget_breached {breached}\n",
+        kill = u8::from(kill),
+        live = u8::from(mode == Mode::Live),
+        pending = state.approvals.pending_count(),
+        orders = b.orders_used,
+        notional = b.notional_used,
+        breached = u8::from(b.breached),
     );
     (
         [(CONTENT_TYPE, "text/plain; version=0.0.4")],

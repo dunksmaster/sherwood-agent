@@ -1,0 +1,47 @@
+# Alert rules for sherwood-server. See docs/OBSERVABILITY.md.
+groups:
+  - name: sherwood
+    rules:
+      - alert: SherwoodDown
+        expr: up{job="sherwood"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "sherwood-server is not being scraped"
+
+      - alert: KillSwitchEngaged
+        expr: sherwood_kill_switch == 1
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "Kill switch is engaged — all orders are being rejected"
+
+      - alert: SessionBudgetBreached
+        expr: sherwood_session_budget_breached == 1
+        for: 0m
+        labels: { severity: warning }
+        annotations:
+          summary: "A per-session budget cap has latched — orders denied until reset"
+
+      - alert: ApprovalsBacklog
+        expr: sherwood_approvals_pending > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "An order has been awaiting approval for 5 minutes"
+
+      - alert: LiveMode
+        expr: sherwood_mode_live == 1
+        for: 0m
+        labels: { severity: info }
+        annotations:
+          summary: "sherwood-server is in LIVE mode"
+
+      - alert: HighServerErrorRate
+        expr: |
+          rate(sherwood_responses_total{class="5xx"}[5m])
+          / clamp_min(rate(sherwood_requests_total[5m]), 0.001) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Over 5% of responses are 5xx over the last 5 minutes"

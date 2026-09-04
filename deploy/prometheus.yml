@@ -1,0 +1,18 @@
+# Minimal Prometheus config to scrape a local sherwood-server.
+# `GET /v1/metrics` is unauthenticated (the server is loopback-only).
+#
+#   prometheus --config.file=deploy/prometheus.yml
+#
+# Load the alert rules alongside it:
+rule_files:
+  - prometheus-alerts.yml
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: sherwood
+    metrics_path: /v1/metrics
+    static_configs:
+      - targets: ["127.0.0.1:8787"]

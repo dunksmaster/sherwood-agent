@@ -47,13 +47,41 @@ fn install_shutdown_handler() -> Arc<AtomicBool> {
     flag
 }
 
+/// Console logging always; a daily-rolling JSON file too when `$SHERWOOD_LOG_DIR`
+/// is set (7-day default retention — old files are the operator's to prune, or
+/// `logrotate`'s). Returns a guard that must live for the process.
+fn init_tracing() -> Option<tracing_appender::non_blocking::WorkerGuard> {
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+
+    let filter =
+        tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    let console = tracing_subscriber::fmt::layer();
+
+    let (file_layer, guard) = match std::env::var_os("SHERWOOD_LOG_DIR") {
+        Some(dir) => {
+            let appender = tracing_appender::rolling::daily(dir, "sherwood.log");
+            let (writer, guard) = tracing_appender::non_blocking(appender);
+            let layer = tracing_subscriber::fmt::layer()
+                .json()
+                .with_writer(writer)
+                .with_ansi(false);
+            (Some(layer), Some(guard))
+        }
+        None => (None, None),
+    };
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(console)
+        .with(file_layer)
+        .init();
+    guard
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
-        )
-        .init();
+    let _log_guard = init_tracing();
 
     let shutdown = install_shutdown_handler();
 

@@ -9,6 +9,13 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Observability (S13a)** — `GET /v1/metrics` gains `sherwood_kill_switch`,
+  `sherwood_mode_live`, `sherwood_approvals_pending`, `sherwood_session_orders_used`,
+  `sherwood_session_notional_used`, and `sherwood_session_budget_breached` gauges — enough
+  for real alerting. `$SHERWOOD_LOG_DIR` turns on a daily-rolling JSON log file
+  (`tracing-appender`) alongside the console. New [`deploy/`](deploy/README.md): a Prometheus
+  scrape config, alert rules (server down, kill switch, budget breached, approvals backlog,
+  LIVE mode, high 5xx), and an importable Grafana dashboard. `docs/OBSERVABILITY.md` written.
 - **`sherwood backtest` (S14a)** — replays the `[general] feed_path` CSV through the
   configured decider and the risk gate (the same `run_loop` as `sherwood run`, same paper
   executor) and prints a performance summary: total return, max drawdown (peak-to-trough of
