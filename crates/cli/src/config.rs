@@ -56,6 +56,10 @@ pub struct General {
     /// path is resolved against the working directory. Absent = no persistence.
     #[serde(default)]
     pub state_path: Option<PathBuf>,
+    /// CSV price feed to replay (`timestamp,symbol,price` rows). Absent = the
+    /// built-in two-symbol demo feed.
+    #[serde(default)]
+    pub feed_path: Option<PathBuf>,
 }
 
 impl Default for General {
@@ -64,6 +68,7 @@ impl Default for General {
             starting_cash: Decimal::from(1_000),
             mode: "paper".into(),
             state_path: None,
+            feed_path: None,
         }
     }
 }

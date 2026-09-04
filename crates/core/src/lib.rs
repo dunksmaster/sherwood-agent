@@ -6,11 +6,13 @@
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 pub mod clock;
+pub mod feed;
 pub mod portfolio;
 pub mod risk;
 pub mod types;
 
 pub use clock::{Clock, FixedClock, SystemClock};
+pub use feed::{PriceFeed, Tick};
 pub use portfolio::Portfolio;
 pub use risk::{GateContext, RiskConfig, RiskGate, RiskReject};
 pub use types::{

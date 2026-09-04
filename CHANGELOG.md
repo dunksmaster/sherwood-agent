@@ -9,6 +9,12 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Multi-asset paper loop + CSV feed (S5.1–5.2)** — `PriceFeed` trait + `Tick` in `core`;
+  `CsvFeed` (replays `timestamp,symbol,price` rows) and `SliceFeed` in the CLI. The run loop
+  is now driven by a feed, one symbol per tick, with equity and unrealized P&L marked
+  against the latest price per held symbol. `[general] feed_path` selects a CSV; `feeds/demo.csv`
+  is a runnable sample. The built-in demo feed trades two symbols. Closes CURRENT-STATE
+  defects 2 and 3.
 - **`RiskGate` extension (S5)** — hard stops (kill switch, realized daily loss) vs entry
   limits. New entry limits, all buy-only so a de-risking sell always passes: an
   **unrealized-loss breaker**, **max concurrent open symbols**, and a **per-symbol buy

@@ -116,16 +116,18 @@ from `GRADE-TARGET.md`.
 | S4.1 | `Decider` registry — name to factory | `decision` | pending — one real decider so far |
 | S4.2–4.6 | `NvidiaDecider` etc.: OpenAI-compatible client, strict JSON, fallback chain, prompt template | `decision` | pending — needs the secrets vault (S6) for the API key |
 | S4.7 | Shared AI quota manager | `supervisor` | pending |
-| S5.1 | `PriceFeed` trait plus a CSV implementation | `core` | pending (next) |
-| S5.2 | Multi-asset runner — iterate configured assets, remove the `"ROAR"` hardcode | `cli` | pending (next) |
+| S5.1 | `PriceFeed` trait (`core`) + `CsvFeed` / `SliceFeed` (`cli`) | `core`, `cli` | done |
+| S5.2 | Multi-asset run loop — the feed defines the universe; equity/unrealized mark per held symbol | `cli` | done |
 | S5.3 | End-to-end loop over the event bus: feed → decider → gate → executor → store | `cli` | done (S1 + S3) |
 | S5.4 | `RiskGate` extension: unrealized-loss breaker, max open positions, per-symbol cooldown, via `GateContext` | `core` | done |
 | S5.5 | Kill switch wired — bus event plus gate check | `core`, `cli` | partial — gate check done; a runtime toggle needs the server (S9) |
 | S5.6 | Graceful shutdown — SIGINT, stop cleanly, snapshot on exit | `cli` | done (Pre-S0 + S1) |
 | S5.7 | Deterministic harness — injected `Clock` (done), seeded RNG (pending), `proptest` on gate arithmetic (pending) | `core`, `cli` | partial |
 
-**Exit criteria:** a multi-asset paper run from a CSV feed, with state persisted across a
-restart and a verifiable audit chain.
+**Exit criteria — met:** `sherwood run` with a `feed_path` CSV replays a two-symbol paper
+run, persists the portfolio + fills + a verifying audit chain, and resumes from the last
+snapshot on the next run. Still open within S4–S5: the AI decider (blocked on S6), a seeded
+RNG, and `proptest` on the gate arithmetic.
 
 ## S6–S8 — Robinhood integration
 
