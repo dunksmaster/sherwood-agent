@@ -10,13 +10,16 @@ generated: false
 The full reference will be generated from `utoipa` annotations at **S9c**; edit the
 annotations, not this document, once that lands.
 
-## Routes so far (S9a–S9c — `sherwood-server`)
+## Routes so far (S9a–S9c, S11a — `sherwood-server`)
 
 | Method | Path | Min role | Notes |
 |---|---|---|---|
 | `GET` | `/v1/health` | none | `{ status, mode, kill_switch, uptime_secs }` |
 | `GET` | `/v1/metrics` | none | Prometheus text exposition |
 | `GET` | `/v1/control` | viewer | `{ mode, kill_switch }` |
+| `GET` | `/v1/portfolio` | viewer | last persisted snapshot: `{ cash, realized_pnl, open_positions, positions[] }`. `404` if no `state_path` or no snapshot. |
+| `GET` | `/v1/activity` | viewer | `?limit=N` (1–500, default 50). `{ recent: AuditEvent[], fills }`. |
+| `GET` | `/v1/audit/verify` | viewer | `{ ok, entries }` or `{ ok: false, broken_at }`. |
 | `POST` | `/v1/hook/pretooluse` | operator | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
 | `POST` | `/v1/mode` | admin | `{ mode: "paper"\|"live", reauth: "<admin token>" }`. `live` is `403` unless `[server] allow_live = true`. |
 | `POST` | `/v1/kill` | admin | `{ engage: bool, reauth: "<admin token>" }`. Engaging makes the hook deny every order immediately. |

@@ -11,6 +11,7 @@ use sherwood_core::RiskGate;
 use sherwood_secrets::SecretsVault;
 use sherwood_server::auth::{ApiToken, TokenOrigin, TokenSet};
 use sherwood_server::AppState;
+use sherwood_store::SqliteStore;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -69,11 +70,26 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         tracing::warn!("[server] allow_live = true — an admin can switch this server to LIVE mode");
     }
 
+    let store = match &cfg.general.state_path {
+        Some(path) => {
+            let s = SqliteStore::open(path)
+                .await
+                .with_context(|| format!("opening the state store at {}", path.display()))?;
+            tracing::info!(path = %path.display(), "serving read-only views from the state store");
+            Some(Arc::new(s))
+        }
+        None => {
+            tracing::info!("no [general] state_path — /v1/portfolio and /v1/activity will 404");
+            None
+        }
+    };
+
     let state = AppState::new(
         tokens,
         RiskGate::new(cfg.risk.to_core()),
         allowlist,
         cfg.server.to_opts(),
+        store,
     );
 
     let flag = Arc::clone(&shutdown);

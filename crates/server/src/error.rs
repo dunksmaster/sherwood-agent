@@ -21,6 +21,9 @@ pub enum ApiError {
     /// The request was syntactically wrong (bad JSON, missing field).
     #[error("{0}")]
     BadRequest(String),
+    /// The addressed resource does not exist (or is not configured).
+    #[error("{0}")]
+    NotFound(String),
     /// The request parsed but described something we cannot act on.
     #[error("{0}")]
     Unprocessable(String),
@@ -35,6 +38,10 @@ pub enum ApiError {
 impl ApiError {
     pub fn bad_request(msg: impl Into<String>) -> Self {
         Self::BadRequest(msg.into())
+    }
+
+    pub fn not_found(msg: impl Into<String>) -> Self {
+        Self::NotFound(msg.into())
     }
 
     pub fn forbidden(msg: impl Into<String>) -> Self {
@@ -54,6 +61,7 @@ impl ApiError {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
             Self::Forbidden(_) => StatusCode::FORBIDDEN,
             Self::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::Unprocessable(_) => StatusCode::UNPROCESSABLE_ENTITY,
             Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             Self::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -65,6 +73,7 @@ impl ApiError {
             Self::Unauthorized => "unauthorized",
             Self::Forbidden(_) => "forbidden",
             Self::BadRequest(_) => "bad_request",
+            Self::NotFound(_) => "not_found",
             Self::Unprocessable(_) => "unprocessable_entity",
             Self::TooManyRequests => "rate_limited",
             Self::Internal(_) => "internal",

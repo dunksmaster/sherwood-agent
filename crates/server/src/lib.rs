@@ -10,6 +10,9 @@
 //! | GET  | `/v1/health` | none | liveness, mode, kill-switch, uptime |
 //! | GET  | `/v1/metrics` | none | Prometheus text |
 //! | GET  | `/v1/control` | viewer | current mode + kill-switch |
+//! | GET  | `/v1/portfolio` | viewer | last persisted portfolio snapshot |
+//! | GET  | `/v1/activity` | viewer | recent audit events + fill count |
+//! | GET  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -60,6 +63,9 @@ pub fn router(state: AppState) -> Router {
 
     let protected = Router::new()
         .route("/v1/control", get(routes::get_control))
+        .route("/v1/portfolio", get(routes::get_portfolio))
+        .route("/v1/activity", get(routes::get_activity))
+        .route("/v1/audit/verify", get(routes::get_audit_verify))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
@@ -113,16 +119,20 @@ mod tests {
     use super::*;
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
+    use chrono::Utc;
     use http_body_util::BodyExt;
     use rust_decimal_macros::dec;
-    use sherwood_core::{RiskConfig, RiskGate};
+    use sherwood_core::{Asset, Fill, Portfolio, RiskConfig, RiskGate, Side, Venue};
     use sherwood_execution::{ToolAllowlist, ToolClass};
+    use sherwood_store::{SqliteStore, Store};
+    use std::sync::Arc;
     use tower::ServiceExt;
 
     const ADMIN: &str = "admin-token";
     const OPERATOR: &str = "operator-token";
+    const VIEWER: &str = "viewer-token";
 
-    fn state_with(opts: ServerOpts) -> AppState {
+    fn state_full(opts: ServerOpts, store: Option<Arc<SqliteStore>>) -> AppState {
         let allowlist = ToolAllowlist::from_pairs([
             ("get_positions", ToolClass::ReadOnly),
             ("place_order", ToolClass::PlaceOrder),
@@ -135,13 +145,42 @@ mod tests {
         let tokens = auth::TokenSet::new(
             auth::ApiToken::from_value(ADMIN),
             Some(auth::ApiToken::from_value(OPERATOR)),
-            None,
+            Some(auth::ApiToken::from_value(VIEWER)),
         );
-        AppState::new(tokens, risk, allowlist, opts)
+        AppState::new(tokens, risk, allowlist, opts, store)
+    }
+
+    fn state_with(opts: ServerOpts) -> AppState {
+        state_full(opts, None)
     }
 
     fn test_state() -> AppState {
         state_with(ServerOpts::default())
+    }
+
+    /// An in-memory store holding one portfolio snapshot with an open position
+    /// and one recorded fill, plus the audit rows that go with them.
+    async fn seeded_store() -> Arc<SqliteStore> {
+        let store = SqliteStore::open_in_memory().await.unwrap();
+        let mut pf = Portfolio::new(dec!(1000));
+        let fill = Fill {
+            order_id: sherwood_core::OrderId::new("t-1"),
+            asset: Asset::symbol("ROAR"),
+            side: Side::Buy,
+            qty: dec!(2),
+            price: dec!(100),
+            fee: dec!(0.1),
+            venue: Venue::Paper,
+            at: Utc::now(),
+        };
+        pf.apply(&fill);
+        store.save_portfolio(&pf).await.unwrap();
+        store.append_fill(&fill).await.unwrap();
+        store
+            .append_audit("order_fill", serde_json::json!({ "symbol": "ROAR" }))
+            .await
+            .unwrap();
+        Arc::new(store)
     }
 
     fn ctx_json() -> serde_json::Value {
@@ -352,6 +391,58 @@ mod tests {
         .await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("\"mode\":\"live\""));
+    }
+
+    #[tokio::test]
+    async fn portfolio_and_activity_404_without_a_store() {
+        for path in ["/v1/portfolio", "/v1/activity", "/v1/audit/verify"] {
+            let mut req = get(path);
+            req.headers_mut()
+                .insert("authorization", format!("Bearer {VIEWER}").parse().unwrap());
+            let resp = call(test_state(), req).await;
+            assert_eq!(resp.status(), StatusCode::NOT_FOUND, "{path}");
+            assert!(body_string(resp).await.contains("\"code\":\"not_found\""));
+        }
+    }
+
+    #[tokio::test]
+    async fn portfolio_reads_the_persisted_snapshot() {
+        let state = state_full(ServerOpts::default(), Some(seeded_store().await));
+        let mut req = get("/v1/portfolio");
+        req.headers_mut()
+            .insert("authorization", format!("Bearer {VIEWER}").parse().unwrap());
+        let resp = call(state, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let b = body_string(resp).await;
+        assert!(b.contains("\"open_positions\":1"), "{b}");
+        assert!(b.contains("\"symbol\":\"ROAR\""), "{b}");
+    }
+
+    #[tokio::test]
+    async fn activity_and_audit_verify_read_the_store() {
+        let store = seeded_store().await;
+        let state = state_full(ServerOpts::default(), Some(store));
+
+        let mut req = get("/v1/activity?limit=10");
+        req.headers_mut()
+            .insert("authorization", format!("Bearer {VIEWER}").parse().unwrap());
+        let resp = call(state.clone(), req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"fills\":1"));
+
+        let mut req = get("/v1/audit/verify");
+        req.headers_mut()
+            .insert("authorization", format!("Bearer {VIEWER}").parse().unwrap());
+        let resp = call(state, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"ok\":true"));
+    }
+
+    #[tokio::test]
+    async fn read_views_need_at_least_viewer() {
+        let state = state_full(ServerOpts::default(), Some(seeded_store().await));
+        let resp = call(state, get("/v1/portfolio")).await; // no token
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

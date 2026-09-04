@@ -176,7 +176,8 @@ land with S9 (`sherwood-server`).
 | S9b | RBAC roles (`viewer` / `operator` / `admin`), PAPER/LIVE toggle (admin + body re-auth, gated by `[server] allow_live`), kill-switch endpoint (admin + body re-auth), `GET /v1/control` | `server` | done |
 | S9c | `GET /v1/metrics` (Prometheus text, hand-rolled — no `prometheus` crate), global fixed-window rate limit (`[server] rate_limit_per_min`), CORS for configured dashboard origins | `server` | done |
 | S9d | WebSocket event feed (bridges `sherwood-events`) + `utoipa`-generated OpenAPI | `server` | deferred — both want the run loop folded into the server (S11) and a stable route set |
-| S10 | Dashboard: React + Vite + shadcn/ui — auth, config, portfolio, activity feed, PAPER/LIVE badge, kill-switch button | `frontend/` |
+| S11a | Read-only views over the persisted state: `GET /v1/portfolio`, `GET /v1/activity`, `GET /v1/audit/verify` (all viewer). `serve` opens the same `[general] state_path` `sherwood run` writes | `server`, `cli` | done — dashboard has real data to render before the full approval gate lands |
+| S10 | Dashboard: React + Vite + shadcn/ui — auth, config, portfolio, activity feed, PAPER/LIVE badge, kill-switch button | `frontend/` | pending — the API surface it needs (health, control, portfolio, activity, kill) now exists |
 | S11 | Approval gate: state machine (proposed → pending → approved → executed → settled, or denied), WebSocket push, order cards with the AI's reasoning, manual and auto modes, auto-deny timeout, revocation before execution | `runtime` |
 | S12 | Scheduler and monitors: `tokio-cron-scheduler`, timezone handling, price-threshold monitors, per-run budgets (max orders, max notional, max duration) with hard stops | `runtime` |
 | S13 | Notifications and observability: OS notifications, audit feed UI with hash verification, Grafana dashboards, alert rules, log rotation | `runtime`, `server` |
