@@ -159,8 +159,11 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**Early build.** 161 Rust tests pass, the dashboard builds, and CI is green. The plan, the standards, the threat model,
-and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance deliverable.
+**v0.1 (paper) — feature complete.** 163 Rust tests pass, the dashboard builds, CI is green,
+and the [threat model is signed off](docs/THREAT-MODEL.md#sign-off). Cutting the `v0.1.0`
+tag is the operator's call — see [RELEASE-NOTES-0.1.0.md](docs/RELEASE-NOTES-0.1.0.md). There
+is **no live-venue path** in v0.1; the Robinhood MCP adapter and everything downstream of it
+is v0.2.
 
 - **Done (S0–S6):** the S0 doc set; a tested `core` with `RiskGate` and `Portfolio`; a
   deterministic paper executor; a rule decider and a language-model decider (strict-JSON
@@ -177,13 +180,16 @@ and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance
   backtest` with total return / drawdown / win rate / profit factor / expectancy.
 - **Done (S13a, S15):** `/v1/metrics` + `deploy/` (Prometheus/Grafana), rolling JSON logs,
   `sherwood backup`/`restore`, `RUNBOOK.md`, a multi-stage `Dockerfile`, `DEPLOYMENT.md`,
-  and the [threat-model sign-off](docs/THREAT-MODEL.md#sign-off).
-- **Left for v0.1:** `utoipa` OpenAPI (S9e), then the signed v0.1 tag + release notes (S16).
-- **Deferred to v0.2:** live-venue reconnection/reconciliation (S7.4–S8), the cron
-  scheduler / live-feed monitors (S12b), A/B backtest (S14b).
+  and the threat-model sign-off. **S9e closed** — `docs/API.md` is the API contract; no
+  generated OpenAPI ([why](docs/DECISIONS.md#2026-09-04)).
+- **Remaining for release (S16):** `git tag -a v0.1.0` + push + a GitHub release. Prepped:
+  release notes, the CHANGELOG `[0.1.0]` section, SBOM in CI.
+- **Deferred to v0.2:** the Robinhood MCP adapter + OAuth + reconciliation + session
+  reconnection (S7.4–S8); the cron scheduler / live-feed monitors (S12b); A/B backtest
+  (S14b); Solana modules.
 
-Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
-code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
+Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Component-by-component audit:
+[`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
 
 Once a dashboard exists, this README will grow a screenshot-driven walkthrough of each
 feature. It does not have one yet because there is nothing to show.

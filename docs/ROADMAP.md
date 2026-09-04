@@ -1,10 +1,16 @@
 ---
 status: accepted
-last-updated: 2026-09-03
+last-updated: 2026-09-04
 owner-step: S0
 ---
 
 # Roadmap
+
+> **v0.1 scope met (2026-09-04).** S0–S15 are done for a **paper** release — see
+> [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md). S9e is closed (no generated
+> OpenAPI). Remaining rows below marked *deferred* / *pending* are v0.2, gated on
+> a live Robinhood MCP connection. Cutting the `v0.1.0` tag is the operator's
+> call (S16).
 
 ## Direction
 
@@ -176,7 +182,7 @@ land with S9 (`sherwood-server`).
 | S9b | RBAC roles (`viewer` / `operator` / `admin`), PAPER/LIVE toggle (admin + body re-auth, gated by `[server] allow_live`), kill-switch endpoint (admin + body re-auth), `GET /v1/control` | `server` | done |
 | S9c | `GET /v1/metrics` (Prometheus text, hand-rolled — no `prometheus` crate), global fixed-window rate limit (`[server] rate_limit_per_min`), CORS for configured dashboard origins | `server` | done |
 | S9d | Event feed: `GET /v1/events` **Server-Sent Events** (not a WebSocket — see the 2026-09-04 [decision log](DECISIONS.md)) streaming new audit-chain rows, consumed by the dashboard in place of polling `/v1/activity`. `serve` stays a control plane; it does not run the loop. | `server`, `frontend/` | done |
-| S9e | `utoipa`-generated OpenAPI to replace the hand-written `docs/API.md` | `server` | deferred — annotation churn + 2 deps for a doc artifact; revisit once the route set stops moving |
+| S9e | `utoipa`-generated OpenAPI | `server` | **closed — not doing it for v0.1.** `docs/API.md` is the maintained contract; ~20 `ToSchema` derives + 15 `#[utoipa::path]` across 8 files with no consumer (loopback tool, hand-typed TS client, no Swagger UI) is not worth the drift. See the 2026-09-04 [decision log](DECISIONS.md). |
 | S11a | Read-only views over the persisted state: `GET /v1/portfolio`, `GET /v1/activity`, `GET /v1/audit/verify` (all viewer). `serve` opens the same `[general] state_path` `sherwood run` writes | `server`, `cli` | done — dashboard has real data to render before the full approval gate lands |
 | S10 | Dashboard: React + Vite + TypeScript in `frontend/` — token login (session-only), status bar with the unmissable PAPER/**LIVE** badge, portfolio + activity + audit-integrity views, admin kill-switch and mode toggle (with re-auth). Strict build-time CSP. New CI job: `npm ci` · lint · typecheck · build | `frontend/` | done — config editor and the approvals queue are follow-ups (need a config API / S11) |
 | S10.1 | `sherwood-server` serves the built dashboard (`[server] static_dir`) via `ServeDir` with SPA fallback + CSP / `X-Frame-Options` / `nosniff` / `Referrer-Policy` headers | `server`, `cli` | done |
@@ -195,7 +201,7 @@ land with S9 (`sherwood-server`).
 | S15a | `sherwood backup <config> <dir>` / `sherwood restore <config> <backup-dir> [--force]` — copy the state DB (+ WAL sidecars) and the vault; `restore` won't clobber without `--force`. [RUNBOOK.md](RUNBOOK.md) written against what v0.1 actually has. | done |
 | S15b | Multi-stage `Dockerfile` (Rust → dashboard → `debian:slim`, non-root), `docker-compose.yml` (host-network `serve`), `DEPLOYMENT.md`, **threat-model sign-off** ([THREAT-MODEL.md](THREAT-MODEL.md#sign-off) → reviewed). Prometheus/Grafana stay on the host — the server is loopback-only. Image build not yet CI-gated. | done |
 | S15c | Reconnect / backoff stress tests, CI Docker-image build | pending — reconnect logic is S8 (live venue) |
-| S16 | v0.1 release — signed tag, SBOM, release notes | pending |
+| S16 | v0.1 release — [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md) written, CHANGELOG `[0.1.0]` section cut, SBOM in CI. Remaining: `git tag -a v0.1.0` (signed if the operator has a key) + push + a GitHub release. | prepped — tag is the operator's |
 
 ## v0.2 — Solana modules
 

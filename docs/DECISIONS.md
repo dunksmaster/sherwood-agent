@@ -33,6 +33,20 @@ Decisions that shaped the project but do not each warrant a full ADR. Newest fir
 
 ### 2026-09-04
 
+**No generated OpenAPI for v0.1 (S9e closed).** `docs/API.md` is the maintained
+API contract. `utoipa` was evaluated and declined: it needs ~20 `ToSchema`
+derives and ~15 `#[utoipa::path]` attributes across eight files, plus
+`value_type` overrides for foreign types (`Decimal`, `AuditEvent`,
+`HookOutcome`, `Portfolio`), and it introduces annotation-vs-code drift with no
+CI guard. There is no consumer — the API is loopback-only, the dashboard uses a
+hand-written typed client, and there is no Swagger UI. Revisit if a third-party
+API consumer appears.
+
+**v0.1 scope met.** S0–S15 are done for a **paper** release. Everything still on
+the roadmap (S7.4 reconciliation, S8 reconnection, S12b scheduler/monitors,
+S14b A/B backtest, S13b OS notifications) is gated on a live Robinhood MCP
+connection or is explicitly v0.2. The `v0.1.0` tag is the operator's to cut.
+
 **Threat model reviewed and signed off (S15)** against the implemented paper system.
 `docs/THREAT-MODEL.md` status → `reviewed`; its sign-off section splits mitigations into
 implemented / partial / deferred (v0.2 / S7.4–S8). No blocking gap for a paper-only v0.1.

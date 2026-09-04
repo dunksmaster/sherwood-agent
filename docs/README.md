@@ -60,6 +60,7 @@ recorded rather than forgotten.
 | Document | Status | What it covers |
 |---|---|---|
 | [DATA-MODEL.md](DATA-MODEL.md) | accepted | `sherwood-store` schema, migrations, the audit hash-chain, regenerating the sqlx offline cache |
+| [API.md](API.md) | accepted | The `sherwood-server` HTTP route table — the API contract for v0.1 |
 | [RUNTIME.md](RUNTIME.md) | partial | Event bus (done, S3); supervisor / scheduler / approval state machine (pending, S3.4–3.5 / S11–S12) |
 
 ## Operations
@@ -71,13 +72,13 @@ recorded rather than forgotten.
 | [OBSERVABILITY.md](OBSERVABILITY.md) | partial | `/v1/metrics` catalogue, `SHERWOOD_LOG_DIR` rotation, alert rules + Grafana JSON ([`deploy/`](../deploy/README.md)) |
 | [RUNBOOK.md](RUNBOOK.md) | partial | Stopping, diagnosing, recovering, `backup` / `restore` |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | partial | Bare binary + systemd, the `Dockerfile` / `docker-compose.yml`, the single-writer SQLite constraint |
+| [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md) | — | What v0.1 is, the component list, and what is explicitly deferred to v0.2 |
 
 ## Stubs — written at the step that needs them
 
 | Document | Filled at | Purpose |
 |---|---|---|
 | [ROBINHOOD-API.md](ROBINHOOD-API.md) | S7 | Asset classes, order types, settlement, rate limits, error codes |
-| [API.md](API.md) | S9 | HTTP API — generated from `utoipa`, not hand-written |
 | [FRONTEND-ARCH.md](FRONTEND-ARCH.md) | S10 | Dashboard state management, auth flow, reconnection |
 
 ## External reviews
