@@ -1,23 +1,74 @@
 ---
-status: stub
-last-updated: 2026-09-03
+status: partial
+last-updated: 2026-09-04
 owner-step: S10
 ---
 
 # Frontend architecture
 
-**Not yet written.** Filled at **S10** — it cannot be specified meaningfully before the
-server's API exists at S9.
+The local control-plane dashboard. Lives in [`frontend/`](../frontend/README.md).
 
-## Will cover
+## Stack
 
-- Stack: React + Vite + TypeScript + shadcn/ui (MIT), served as static files by
-  `sherwood-server`
-- State management choice and rationale — becomes ADR-0006
-- Auth flow: local bearer token, where it is entered, how it is held
-- WebSocket lifecycle: subscription model, reconnection with backoff, missed-event recovery
-- Views: Config · Portfolio · Activity · Approvals · Settings
-- **PAPER / LIVE badge** — unmissable, and visibly different in live mode
-- Kill-switch control: admin-only, confirmation dialog
-- Charting library choice and the money-formatting rules (`Decimal` arrives as strings)
-- Content Security Policy — strict, no external script or style origins
+- **React 18 + Vite 5 + TypeScript**, `strict` with `noUnusedLocals` /
+  `noUnusedParameters` / `noFallthroughCasesInSwitch`.
+- **No UI framework.** A single hand-written `styles.css` in the shadcn/ui idiom
+  (CSS variables, rounded panels, muted labels). shadcn's component _source_ is
+  MIT and can be vendored later if the surface grows; for now the app is small
+  enough that a stylesheet is less machinery than a component library.
+- ESLint flat config (`@eslint/js` + `typescript-eslint` + `react-hooks`).
+- No data-fetching library — a `usePoll` hook over `fetch`, polling every 4s.
+  This is a single-operator loopback panel; a WebSocket replaces polling at S9d.
+
+State management is component-local `useState`; there is no store. If that stops
+scaling it becomes ADR-0006 — not before.
+
+## Serving
+
+- **Dev:** `npm run dev` on `:5173`, with a Vite proxy sending `/v1` to
+  `127.0.0.1:8787` so the browser is same-origin and needs no server-side CORS.
+- **Production:** `npm run build` emits `dist/`; `sherwood-server` serves it from
+  its own origin via `ServeDir`. That wiring is a follow-up — the SPA builds and
+  is CI-gated now, the static-file route lands with S9d.
+
+## Auth
+
+The API bearer token is pasted into a prompt and held in `sessionStorage` —
+this tab only, cleared on close, never written to disk. A `401` from any call
+drops the token and returns to the prompt. RBAC is enforced server-side; the UI
+simply surfaces a `403` inline (e.g. a viewer pressing the kill switch).
+
+The kill switch and the PAPER/LIVE toggle re-prompt for the **admin token**,
+which is sent as the request-body `reauth` field the server checks independently
+of the session token.
+
+## Money
+
+`Decimal` values arrive as JSON **strings** (`rust_decimal` default). The client
+never does arithmetic on them beyond `Number(...)` for display formatting
+(`fmtMoney`), so precision is only ever lost in the rendered string, never in a
+value sent back.
+
+## PAPER / LIVE badge
+
+Always visible in the status bar. `PAPER` is a quiet blue outline; `LIVE` is a
+solid red fill that pulses. An engaged kill switch adds a second red badge.
+
+## Content Security Policy
+
+A strict CSP (`default-src 'self'`, `script-src 'self'`, no external origins) is
+injected into `index.html` **at build time only** — the dev server needs inline
+scripts for HMR. When the server serves `dist/` it will also send the CSP as a
+response header.
+
+## Views
+
+| View | Source | Status |
+|---|---|---|
+| Status bar — mode, kill switch, uptime | `GET /v1/health` | done |
+| Portfolio — cash, realized P&L, positions | `GET /v1/portfolio` | done |
+| Activity — recent audit events, fill count, chain-integrity badge | `GET /v1/activity`, `GET /v1/audit/verify` | done |
+| Controls — kill switch, PAPER/LIVE toggle | `POST /v1/kill`, `POST /v1/mode` | done |
+| Config editor | — | pending (needs a config API) |
+| Approvals queue | — | pending (S11) |
+| Charts (P&L curve) | — | pending (library choice deferred until there is data to plot) |
