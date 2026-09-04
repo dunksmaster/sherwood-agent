@@ -9,7 +9,7 @@
 //! Equity and unrealized P&L are marked against the latest price seen for every
 //! held symbol. The loop publishes [`Event`]s onto a [`Bus`]; subscribers
 //! persist and log them. The portfolio *snapshot* is written to the store
-//! directly — the loop owns that state.
+//! directly â€” the loop owns that state.
 
 use crate::config::AppConfig;
 use crate::feed::{CsvFeed, SliceFeed};
@@ -18,8 +18,8 @@ use chrono::{DateTime, Duration, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use sherwood_core::{
-    Asset, Clock, Decision, GateContext, MarketSnapshot, Order, OrderId, Portfolio, PriceFeed,
-    RiskGate, Side, SystemClock, Tick, Venue,
+    Asset, Clock, Decision, Fill, GateContext, MarketSnapshot, Order, OrderId, Portfolio,
+    PriceFeed, RiskGate, Side, SystemClock, Tick, Venue,
 };
 use sherwood_decision::{
     AiConfig, AiDecider, AiProvider, Decider, DecisionContext, OpenAiCompatProvider, RuleConfig,
@@ -86,6 +86,17 @@ fn decision_tag(d: &Decision) -> &'static str {
     }
 }
 
+/// Collected while a loop runs, for the backtest report. `None` in normal runs.
+#[derive(Debug, Default, Clone)]
+pub struct Recording {
+    pub starting_cash: Decimal,
+    /// Mark-to-market equity after each processed tick.
+    pub equity_curve: Vec<Decimal>,
+    pub fills: Vec<Fill>,
+    pub final_equity: Decimal,
+    pub realized_pnl: Decimal,
+}
+
 /// Everything a paper run needs except the decider (a separate argument so it
 /// can be a trait object).
 struct Run<'a> {
@@ -96,6 +107,8 @@ struct Run<'a> {
     shutdown: &'a AtomicBool,
     store: Option<Arc<SqliteStore>>,
     clock: &'a dyn Clock,
+    /// When set, the loop records its equity curve and fills here.
+    recorder: Option<&'a mut Recording>,
 }
 
 async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
@@ -107,6 +120,7 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         shutdown,
         store,
         clock,
+        mut recorder,
     } = cfg;
 
     let bus = Bus::new(1000);
@@ -141,7 +155,7 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
 
     while let Some(tick) = feed.next_tick() {
         if shutdown.load(Ordering::Relaxed) {
-            tracing::warn!(tick = tick_no, "shutdown requested — stopping cleanly");
+            tracing::warn!(tick = tick_no, "shutdown requested â€” stopping cleanly");
             interrupted = true;
             break;
         }
@@ -214,6 +228,9 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
                             side = ?fill.side, qty = %fill.qty, price = %fill.price,
                             cash = %portfolio.cash(), "filled"
                         );
+                        if let Some(r) = recorder.as_mut() {
+                            r.fills.push(fill.clone());
+                        }
                         bus.publish(Event::OrderFilled(fill));
                     }
                     Err(e) => tracing::warn!(tick = tick_no, "executor rejected order: {e}"),
@@ -229,12 +246,23 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
             }
         }
 
+        if let Some(r) = recorder.as_mut() {
+            r.equity_curve
+                .push(portfolio.equity(|s| latest.get(s).copied()));
+        }
+
         prev.insert(sym, px);
         tick_no += 1;
     }
 
     let equity = portfolio.equity(|s| latest.get(s).copied());
     let state = if interrupted { "interrupted" } else { "done" };
+
+    if let Some(r) = recorder.as_mut() {
+        r.starting_cash = starting_cash;
+        r.final_equity = equity;
+        r.realized_pnl = portfolio.realized_pnl();
+    }
 
     if let Some(s) = &store {
         s.save_portfolio(&portfolio).await?;
@@ -326,6 +354,7 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
             shutdown,
             store: None,
             clock: &SystemClock,
+            recorder: None,
         },
         &RuleDecider::new(RuleConfig::default()),
     )
@@ -362,16 +391,44 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
             shutdown,
             store,
             clock: &SystemClock,
+            recorder: None,
         },
         decider.as_ref(),
     )
     .await
 }
 
+/// Replay `cfg`'s feed through its decider once, deterministically, recording
+/// the equity curve and every fill. No persistence, no bus subscribers beyond
+/// tracing. Used by [`crate::backtest`].
+pub async fn run_backtest(cfg: &AppConfig, shutdown: &AtomicBool) -> Result<Recording> {
+    let decider = build_decider(cfg)?;
+    let feed: Box<dyn PriceFeed> = match &cfg.general.feed_path {
+        Some(path) => Box::new(CsvFeed::open(path)?),
+        None => Box::new(SliceFeed::new(demo_feed())),
+    };
+    let mut rec = Recording::default();
+    run_loop(
+        Run {
+            label: "backtest",
+            feed,
+            starting_cash: cfg.general.starting_cash,
+            gate: RiskGate::new(cfg.risk.to_core()),
+            shutdown,
+            store: None,
+            clock: &SystemClock,
+            recorder: Some(&mut rec),
+        },
+        decider.as_ref(),
+    )
+    .await?;
+    Ok(rec)
+}
+
 /// Build the decider named by `general.decider`. `"rule"` is self-contained;
 /// `"ai"` resolves `ai.api_key` against the vault and wraps an
 /// OpenAI-compatible provider. The config is already validated, so an unknown
-/// name here is unreachable in practice — treated as an error regardless.
+/// name here is unreachable in practice â€” treated as an error regardless.
 fn build_decider(cfg: &AppConfig) -> Result<Box<dyn Decider>> {
     match cfg.general.decider.as_str() {
         "rule" => Ok(Box::new(RuleDecider::new(RuleConfig::default()))),
@@ -389,7 +446,7 @@ fn build_decider(cfg: &AppConfig) -> Result<Box<dyn Decider>> {
             )?;
             tracing::info!(
                 provider = %provider.describe(),
-                "ai decider enabled — advisory only, paper-only; RiskGate still decides"
+                "ai decider enabled â€” advisory only, paper-only; RiskGate still decides"
             );
             let ai_cfg = AiConfig {
                 max_tokens: cfg.ai.max_tokens,
@@ -449,6 +506,7 @@ mod tests {
                 shutdown: &flag,
                 store: Some(store.clone()),
                 clock: &clock,
+                recorder: None,
             },
             &RuleDecider::new(RuleConfig::default()),
         )
@@ -466,6 +524,50 @@ mod tests {
             store.verify_audit_chain().await.unwrap(),
             sherwood_store::AuditVerification::Ok { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn run_backtest_records_an_equity_curve_and_fills() {
+        let dir = tempfile::tempdir().unwrap();
+        let feed = dir.path().join("feed.csv");
+        std::fs::write(
+            &feed,
+            "timestamp,symbol,price\n\
+             2026-01-01T00:00:00Z,ROAR,100\n\
+             2026-01-01T00:01:00Z,ROAR,108\n\
+             2026-01-01T00:02:00Z,ROAR,120\n\
+             2026-01-01T00:03:00Z,ROAR,135\n\
+             2026-01-01T00:04:00Z,ROAR,95\n",
+        )
+        .unwrap();
+
+        let cfg = AppConfig {
+            general: crate::config::General {
+                starting_cash: dec!(1000),
+                mode: "paper".into(),
+                state_path: None,
+                feed_path: Some(feed),
+                decider: "rule".into(),
+            },
+            risk: crate::config::RiskSection {
+                max_order_notional: dec!(10_000),
+                max_position_fraction: dec!(0.5),
+                ..crate::config::RiskSection::default()
+            },
+            ai: Default::default(),
+            copytrade: Default::default(),
+            sniper: Default::default(),
+            server: Default::default(),
+            hook: Default::default(),
+        };
+
+        let rec = run_backtest(&cfg, &AtomicBool::new(false)).await.unwrap();
+        assert_eq!(rec.equity_curve.len(), 5); // one per tick
+        assert_eq!(rec.starting_cash, dec!(1000));
+        assert!(
+            !rec.fills.is_empty(),
+            "the momentum rule should have traded"
+        );
     }
 
     #[tokio::test]
