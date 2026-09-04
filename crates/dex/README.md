@@ -42,18 +42,29 @@ Two different checks were run, with two different results:
   `ExactInputSingleParams` layout (including `minHopPriceX36` at exactly byte 288, and
   `hookData`'s offset at exactly `9*32`), and the `SETTLE_ALL`/`TAKE_ALL` param shape —
   matched exactly. This is strong evidence the encoding logic in `v4swap.rs` is right.
-- **End-to-end simulation of a Stock Token pool: not yet successful.** `sherwood
-  dex-simulate` against the live NVDA/USDG pool (fee 3000, tickSpacing 60) reverts with
-  empty revert data (`0x`), even from a wallet confirmed — freshly, at call time — to
-  hold ample USDG **and** to have both prerequisite approvals (`ERC20.approve` to
-  Permit2 and `Permit2.approve` to the router) already maxed out. Smaller amounts and
-  looser slippage didn't change the outcome. Re-simulating an *actual* successful
-  transaction from its real sender succeeds (`eth_call` returns cleanly), which rules
-  out `sherwood-chain`'s `eth_call` plumbing as the cause. The likely difference is
-  something about *this specific pool's* tradable state (v4's concentrated liquidity
-  can report a nonzero `getLiquidity` for a position that is out of range at the
-  current tick, i.e. effectively zero liquidity for a swap right now) rather than the
-  calldata itself, but that is not confirmed — root cause is still open.
+- **End-to-end simulation of a Stock Token pool: not yet successful — narrowed, not
+  solved.** `sherwood dex-simulate` against the live NVDA/USDG pool reverts with empty
+  revert data (`0x`), from a wallet confirmed — freshly, at call time — to hold ample
+  USDG and to have both prerequisite approvals already maxed out. What's been ruled out,
+  each checked directly against the live chain:
+  - **Not the RPC plumbing.** Re-simulating an *actual* successful transaction from its
+    real sender succeeds cleanly via the same `eth_call` path.
+  - **Not "wrong pool by liquidity ranking."** `NVDA/USDG` has 220+ Initialize'd pools
+    (most look like spam/dynamic-fee decoys). The one `find_best_pool` selects (fee
+    3000, tickSpacing 60) has ~78× the raw `getLiquidity()` of the pool at the fee tier
+    (375, tickSpacing 4) that a *different* Stock Token/USDG pair's real successful swap
+    actually used. Tried both — **both revert identically.**
+  - **Not Permit2 or the SETTLE step.** `Permit2.transferFrom(wallet → router, 5 USDG)`,
+    called directly (bypassing the router/pool entirely) with `from` set to the router
+    (the approved spender), **succeeds** — the wallet's real USDG moves.
+  - **Not the TAKE step either.** `NVDA.transfer(recipient, 1)` called with `from` set to
+    the `PoolManager` itself **succeeds** — consistent with ADR-0006's finding that NVDA
+    transfers are permissionless.
+
+  That leaves the `SWAP_EXACT_IN_SINGLE` action's actual pool-swap execution (inside
+  `V4Router`/`PoolManager.unlock`) as the remaining suspect, isolated by elimination
+  rather than confirmed directly — a debug-trace-capable RPC (`debug_traceCall`, not
+  available on the public endpoint used here) would settle it outright.
 
 **Practical conclusion: do not sign or broadcast a swap built by this crate against a
 real pool until `sherwood dex-simulate` for that exact pool returns success.** That
