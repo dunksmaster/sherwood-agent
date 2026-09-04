@@ -285,6 +285,9 @@ pub struct ServerSection {
     /// Browser origins allowed to call the API (the dashboard dev server, the
     /// served origin). Empty = same-origin only, no CORS headers.
     pub cors_origins: Vec<String>,
+    /// Directory of the built dashboard (`frontend/dist`) to serve at `/`.
+    /// Absent = API only.
+    pub static_dir: Option<PathBuf>,
 }
 
 impl Default for ServerSection {
@@ -297,6 +300,7 @@ impl Default for ServerSection {
             allow_live: false,
             rate_limit_per_min: 120,
             cors_origins: Vec::new(),
+            static_dir: None,
         }
     }
 }
@@ -308,10 +312,20 @@ impl ServerSection {
             allow_live: self.allow_live,
             rate_limit_per_min: self.rate_limit_per_min,
             cors_origins: self.cors_origins.clone(),
+            static_dir: self.static_dir.clone(),
         }
     }
 
     fn validate(&self) -> Result<()> {
+        if let Some(dir) = &self.static_dir {
+            if !dir.join("index.html").is_file() {
+                bail!(
+                    "server.static_dir {:?} has no index.html — point it at `frontend/dist` \
+                     after `npm run build`",
+                    dir
+                );
+            }
+        }
         let addr: std::net::SocketAddr = self
             .bind
             .parse()

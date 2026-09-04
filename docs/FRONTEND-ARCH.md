@@ -27,9 +27,10 @@ scaling it becomes ADR-0006 — not before.
 
 - **Dev:** `npm run dev` on `:5173`, with a Vite proxy sending `/v1` to
   `127.0.0.1:8787` so the browser is same-origin and needs no server-side CORS.
-- **Production:** `npm run build` emits `dist/`; `sherwood-server` serves it from
-  its own origin via `ServeDir`. That wiring is a follow-up — the SPA builds and
-  is CI-gated now, the static-file route lands with S9d.
+- **Production:** `npm run build` emits `dist/`; set `[server] static_dir =
+  "frontend/dist"` and `sherwood-server` serves it at `/` from its own origin
+  (SPA fallback to `index.html`), sending the CSP and hardening headers with
+  every static response. `/v1/*` keeps precedence. Done (S10.1).
 
 ## Auth
 
@@ -58,8 +59,10 @@ solid red fill that pulses. An engaged kill switch adds a second red badge.
 
 A strict CSP (`default-src 'self'`, `script-src 'self'`, no external origins) is
 injected into `index.html` **at build time only** — the dev server needs inline
-scripts for HMR. When the server serves `dist/` it will also send the CSP as a
-response header.
+scripts for HMR. When `sherwood-server` serves `dist/` it also sends the same
+CSP (plus `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+`Referrer-Policy: no-referrer`) as response headers; the string is kept in sync
+between `frontend/vite.config.ts` and `sherwood_server::DASHBOARD_CSP`.
 
 ## Views
 

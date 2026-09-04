@@ -9,6 +9,12 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Server serves the dashboard (S10.1)** — `[server] static_dir` (e.g. `frontend/dist`)
+  makes `sherwood-server` serve the built dashboard at `/` with SPA fallback to
+  `index.html`, so the whole thing runs from one loopback origin. Static responses carry a
+  strict `Content-Security-Policy` (matching the build-time one), `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`. `/v1/*` still takes
+  precedence; config validation checks the directory has an `index.html`.
 - **Dashboard (S10)** — `frontend/`: a React + Vite + TypeScript control panel for
   `sherwood-server`. Token login held in `sessionStorage` (this tab only, never on disk),
   dropped on any `401`. Status bar with the always-visible PAPER / **LIVE** badge (live is
