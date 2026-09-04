@@ -10,6 +10,7 @@
 mod backtest;
 mod backup_cmd;
 mod chain_cmd;
+mod chain_price_cmd;
 mod config;
 mod feed;
 mod runner;
@@ -33,7 +34,8 @@ fn usage() -> ! {
          sherwood backup <config.toml> <dir>    copy the state DB + vault into <dir>\n  \
          sherwood restore <config.toml> <backup-dir> [--force]   copy them back\n  \
          sherwood secrets <cmd>        manage the encrypted secret vault\n  \
-         sherwood chain-probe [rpc-url] [token ...]  read-only Robinhood Chain transfer pre-flight\n"
+         sherwood chain-probe [rpc-url] [token ...]  read-only Robinhood Chain transfer pre-flight\n  \
+         sherwood chain-price [rpc-url] [token] [denom]  read a live Stock Token price off-chain\n"
     );
     std::process::exit(2);
 }
@@ -94,6 +96,7 @@ async fn main() -> Result<()> {
     match args.next().as_deref() {
         Some("secrets") => secrets_cmd::run(args),
         Some("chain-probe") => chain_cmd::run(args).await,
+        Some("chain-price") => chain_price_cmd::run(args).await,
         Some("demo") => runner::demo(&shutdown).await,
         Some("run") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
