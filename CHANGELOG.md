@@ -8,6 +8,19 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.1.0] - 2026-09-04
+
+First feature-complete **paper** release. An agentic-trading control plane: a
+deterministic engine, a fail-closed risk gate, a human-in-the-loop approval
+gate, per-session spend budgets, an encrypted secret vault, a loopback HTTP API
+with a React dashboard, a hash-chained tamper-evident audit log, a backtester,
+and Prometheus metrics. **No live-venue path** — the Robinhood MCP adapter,
+order reconciliation, and session reconnection are v0.2 (see
+[ROADMAP.md](docs/ROADMAP.md) and the [threat-model
+sign-off](docs/THREAT-MODEL.md#sign-off)).
+
 ### Added
 - **Docker + deployment docs + threat-model sign-off (S15b)** — a multi-stage `Dockerfile`
   (Rust build → dashboard build → `debian:bookworm-slim` runtime, non-root, stripped) and a
@@ -185,5 +198,6 @@ the workspace version remains `0.1.0` (the in-progress target).
   `PaperExecutor`; `RuleDecider` and an `AiDecider` closure wrapper.
 - The S0 documentation set under `docs/`, including three accepted ADRs.
 
-[Unreleased]: https://github.com/dunksmaster/sherwood-agent/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/dunksmaster/sherwood-agent/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/dunksmaster/sherwood-agent/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/dunksmaster/sherwood-agent/releases/tag/v0.0.1

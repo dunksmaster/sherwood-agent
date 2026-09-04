@@ -1,5 +1,5 @@
 ---
-status: partial
+status: accepted
 last-updated: 2026-09-04
 owner-step: S9
 generated: false
@@ -7,10 +7,11 @@ generated: false
 
 # HTTP API
 
-The full reference will be generated from `utoipa` annotations at **S9c**; edit the
-annotations, not this document, once that lands.
+This table is **the API contract** for v0.1. Generated OpenAPI (`utoipa`) was
+evaluated and declined — see the 2026-09-04 [decision log](DECISIONS.md#2026-09-04).
+Keep it in sync with `crates/server/src/routes.rs` when routes change.
 
-## Routes so far (S9a–S9d, S11, S11a, S12a — `sherwood-server`)
+## Routes (`sherwood-server`, v0.1)
 
 | Method | Path | Min role | Notes |
 |---|---|---|---|
@@ -38,7 +39,7 @@ A global fixed-window rate limit (`[server] rate_limit_per_min`, default 120) re
 with the standard envelope when exceeded. CORS headers are emitted only for origins listed in
 `[server] cors_origins`. With `[server] static_dir` set, the built dashboard is served at `/`
 (SPA fallback to `index.html`) with a strict CSP and hardening headers; `/v1/*` keeps
-precedence. `utoipa`-generated OpenAPI replaces this file at S9e.
+precedence.
 
 ## Contract (from [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md#api))
 
