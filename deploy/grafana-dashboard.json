@@ -1,0 +1,96 @@
+{
+  "__comment": "Import into Grafana; pick your Prometheus datasource. See docs/OBSERVABILITY.md.",
+  "title": "sherwood-server",
+  "uid": "sherwood-server",
+  "schemaVersion": 39,
+  "editable": true,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Kill switch",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sherwood_kill_switch" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "clear", "color": "green" }, "1": { "text": "ENGAGED", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Mode",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sherwood_mode_live" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "PAPER", "color": "blue" }, "1": { "text": "LIVE", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Approvals pending",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sherwood_approvals_pending" }]
+    },
+    {
+      "type": "stat",
+      "title": "Session budget breached",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sherwood_session_budget_breached" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "ok", "color": "green" }, "1": { "text": "BREACHED", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests / sec by status class",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum by (class) (rate(sherwood_responses_total[5m]))", "legendFormat": "{{class}}" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Session notional used",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sherwood_session_notional_used", "legendFormat": "notional" },
+        { "expr": "sherwood_session_orders_used", "legendFormat": "orders" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Uptime (seconds)",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [{ "expr": "sherwood_uptime_seconds" }]
+    }
+  ]
+}

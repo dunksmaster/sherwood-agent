@@ -91,6 +91,7 @@ sherwood-agent/
 │   ├── sniper/       library scaffold — deferred to v0.2
 │   └── cli/          the `sherwood` binary
 ├── frontend/         React + Vite + TS control-plane dashboard
+├── deploy/           Prometheus scrape + alert rules, Grafana dashboard JSON
 ├── .sqlx/            committed sqlx offline query cache (CI uses this)
 ├── docs/             the plan, standards, security, ADRs — start at docs/README.md
 ├── feeds/            sample CSV price feeds for `sherwood run --feed_path`

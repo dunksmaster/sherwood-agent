@@ -13,6 +13,7 @@ keypair*.json
 
 # logs / state
 *.log
+sherwood.log*
 /data
 /state
 *.db

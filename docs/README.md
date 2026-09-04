@@ -68,6 +68,7 @@ recorded rather than forgotten.
 |---|---|---|
 | [LIVE_EXECUTION.md](LIVE_EXECUTION.md) | accepted | The operator boundary and how live execution gets wired |
 | [BACKTEST.md](BACKTEST.md) | partial | `sherwood backtest` — metrics and, deliberately, what it does not tell you |
+| [OBSERVABILITY.md](OBSERVABILITY.md) | partial | `/v1/metrics` catalogue, `SHERWOOD_LOG_DIR` rotation, alert rules + Grafana JSON ([`deploy/`](../deploy/README.md)) |
 
 ## Stubs — written at the step that needs them
 
@@ -76,7 +77,6 @@ recorded rather than forgotten.
 | [ROBINHOOD-API.md](ROBINHOOD-API.md) | S7 | Asset classes, order types, settlement, rate limits, error codes |
 | [API.md](API.md) | S9 | HTTP API — generated from `utoipa`, not hand-written |
 | [FRONTEND-ARCH.md](FRONTEND-ARCH.md) | S10 | Dashboard state management, auth flow, reconnection |
-| [OBSERVABILITY.md](OBSERVABILITY.md) | S13 | Metrics, log aggregation, dashboards, alert thresholds |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | S15 | Docker, cross-compilation, install methods |
 | [RUNBOOK.md](RUNBOOK.md) | S15 | Incident response, kill switch procedure, recovery |
 

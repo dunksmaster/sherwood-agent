@@ -301,6 +301,9 @@ mod tests {
         assert!(b.contains("sherwood_responses_total{class=\"4xx\"}"));
         assert!(b.contains("sherwood_kill_switch 0"));
         assert!(b.contains("sherwood_mode_live 0"));
+        assert!(b.contains("sherwood_approvals_pending 0"));
+        assert!(b.contains("sherwood_session_budget_breached 0"));
+        assert!(b.contains("sherwood_session_orders_used 0"));
     }
 
     #[tokio::test]
