@@ -587,6 +587,7 @@ mod tests {
             server: Default::default(),
             hook: Default::default(),
             chain: Default::default(),
+            wallets: Vec::new(),
         };
 
         let rec = run_backtest(&cfg, &AtomicBool::new(false)).await.unwrap();
@@ -634,6 +635,7 @@ mod tests {
             server: Default::default(),
             hook: Default::default(),
             chain: Default::default(),
+            wallets: Vec::new(),
         };
 
         run(cfg, &AtomicBool::new(false)).await.unwrap();

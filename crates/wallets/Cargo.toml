@@ -1,0 +1,23 @@
+[package]
+name = "sherwood-wallets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Multi-wallet registry for Robinhood Chain (ADR-0006, v0.2.3): named wallets,
+# each holding a sherwood-signer key, a per-wallet spend ceiling, and an
+# optional symbol allowlist. No RPC client, no broadcast — same boundary as
+# sherwood-signer, one layer up.
+
+[dependencies]
+sherwood-secrets = { path = "../secrets" }
+sherwood-signer = { path = "../signer" }
+thiserror.workspace = true
+rust_decimal.workspace = true
+
+[dev-dependencies]
+rust_decimal_macros.workspace = true
+
+[lints]
+workspace = true

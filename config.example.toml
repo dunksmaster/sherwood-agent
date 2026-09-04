@@ -100,3 +100,15 @@ enabled = false
 symbols = []                # e.g. ["NVDA", "TSLA"] — known symbols or raw addresses
 denom   = "USDG"            # every price is quoted in this token
 poll_interval_secs = 15     # seconds between completing one round of all symbols and the next
+
+# [[wallets]]
+# A named Robinhood Chain wallet (ADR-0006, sherwood-wallets). Loaded and
+# reported by `sherwood wallets config.toml` — never wired into a trade path
+# yet (that's sherwood-dex). The key comes from the vault ONLY:
+#   sherwood secrets set evm_wallet   # pastes the hex private key, stdin only
+# name                = "primary"
+# key_ref             = "vault:evm_wallet"  # must be a vault: reference, like ai.api_key
+# allowed_symbols     = []            # e.g. ["NVDA"] — empty = this wallet may trade anything
+# max_tx_count        = 0             # 0 = unlimited
+# max_notional        = 0             # 0 = unlimited
+# max_duration_secs   = 0             # 0 = unlimited
