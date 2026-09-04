@@ -154,6 +154,7 @@ mod tests {
             sniper: Default::default(),
             server: Default::default(),
             hook: Default::default(),
+            chain: Default::default(),
         }
     }
 

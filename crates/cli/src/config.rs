@@ -48,6 +48,8 @@ pub struct AppConfig {
     pub server: ServerSection,
     #[serde(default)]
     pub hook: HookSection,
+    #[serde(default)]
+    pub chain: ChainSection,
 }
 
 #[derive(Debug, Deserialize)]
@@ -63,7 +65,8 @@ pub struct General {
     #[serde(default)]
     pub state_path: Option<PathBuf>,
     /// CSV price feed to replay (`timestamp,symbol,price` rows). Absent = the
-    /// built-in two-symbol demo feed.
+    /// built-in two-symbol demo feed. Ignored if `[chain] enabled = true` — the
+    /// chain feed takes precedence.
     #[serde(default)]
     pub feed_path: Option<PathBuf>,
     /// Which decider drives entries: `"rule"` (deterministic thresholds, the
@@ -81,6 +84,55 @@ impl Default for General {
             feed_path: None,
             decider: "rule".into(),
         }
+    }
+}
+
+/// A live price feed off Robinhood Chain instead of a CSV replay. **Still
+/// paper trading** — this only supplies prices; no wallet, no signing, no
+/// order ever reaches the venue. See [ADR-0006](../../../docs/adr/0006-robinhood-chain-venue.md)
+/// and `sherwood_chain::feed::ChainFeed`.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ChainSection {
+    pub enabled: bool,
+    /// JSON-RPC endpoint. Defaults to Robinhood Chain's public mainnet RPC.
+    pub rpc_url: String,
+    /// Known symbols (`"NVDA"`) or raw addresses to poll, round-robin.
+    pub symbols: Vec<String>,
+    /// The token every price is quoted in — a known symbol or address.
+    pub denom: String,
+    /// Seconds between completing one round of all `symbols` and starting the
+    /// next.
+    pub poll_interval_secs: u64,
+}
+
+impl Default for ChainSection {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            rpc_url: sherwood_chain::tokens::DEFAULT_RPC.to_owned(),
+            symbols: Vec::new(),
+            denom: "USDG".into(),
+            poll_interval_secs: 15,
+        }
+    }
+}
+
+impl ChainSection {
+    fn validate(&self) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+        if self.symbols.is_empty() {
+            bail!("chain.enabled = true needs at least one symbol in chain.symbols");
+        }
+        if self.rpc_url.is_empty() {
+            bail!("chain.rpc_url must not be empty");
+        }
+        if self.poll_interval_secs == 0 {
+            bail!("chain.poll_interval_secs must be > 0");
+        }
+        Ok(())
     }
 }
 
@@ -443,6 +495,7 @@ impl AppConfig {
 
         self.risk.validate()?;
         self.server.validate()?;
+        self.chain.validate()?;
 
         if !self.copytrade.leaders.is_empty() {
             if let Some(f) = self.copytrade.fixed_fraction {
@@ -497,6 +550,7 @@ mod tests {
             sniper: SniperSection::default(),
             server: ServerSection::default(),
             hook: HookSection::default(),
+            chain: ChainSection::default(),
         }
     }
 
@@ -634,6 +688,31 @@ mod tests {
         c.copytrade.fixed_fraction = Some(dec!(9)); // absurd, but no leaders
         assert!(c.validate().is_ok());
         c.copytrade.leaders.push("0xabc".into());
+        assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn chain_feed_disabled_by_default_needs_no_symbols() {
+        let c = base();
+        assert!(!c.chain.enabled);
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn enabling_the_chain_feed_without_symbols_is_rejected() {
+        let mut c = base();
+        c.chain.enabled = true;
+        assert!(c.validate().is_err());
+        c.chain.symbols.push("NVDA".into());
+        assert!(c.validate().is_ok());
+    }
+
+    #[test]
+    fn chain_feed_rejects_a_zero_poll_interval() {
+        let mut c = base();
+        c.chain.enabled = true;
+        c.chain.symbols.push("NVDA".into());
+        c.chain.poll_interval_secs = 0;
         assert!(c.validate().is_err());
     }
 }

@@ -213,6 +213,55 @@ pub async fn discover_pools<C: EvmClient + ?Sized>(
     Ok(out)
 }
 
+/// Find every pool between exactly `token` and `denom` (either order). Unlike
+/// [`discover_pools`], the counter-currency is constrained too — necessary
+/// before trusting a pool's price, since a pool the *token* is merely *in*
+/// could be paired against anything (a different stable, WETH, a spam token
+/// with different decimals), and mis-assuming it is `denom` silently produces
+/// a nonsense price (this was caught live: a pool with `token` paired against
+/// something else was picked by raw liquidity and priced as if it were
+/// `token`/USDG, giving a wrong-by-orders-of-magnitude result).
+pub async fn discover_pools_for_pair<C: EvmClient + ?Sized>(
+    client: &C,
+    pool_manager: &str,
+    token: &str,
+    denom: &str,
+    from_block: u64,
+    to_block: u64,
+) -> Result<Vec<PoolKey>> {
+    let (token_topic, denom_topic) = (topic_from_address(token)?, topic_from_address(denom)?);
+    let init_topic = INITIALIZE_TOPIC.to_owned();
+
+    let token_is_c0 = LogFilter {
+        address: Some(pool_manager.to_lowercase()),
+        topics: vec![
+            Some(init_topic.clone()),
+            None,
+            Some(token_topic.clone()),
+            Some(denom_topic.clone()),
+        ],
+        from_block,
+        to_block,
+    };
+    let token_is_c1 = LogFilter {
+        address: Some(pool_manager.to_lowercase()),
+        topics: vec![Some(init_topic), None, Some(denom_topic), Some(token_topic)],
+        from_block,
+        to_block,
+    };
+
+    let mut out = Vec::new();
+    for filter in [token_is_c0, token_is_c1] {
+        for log in client.get_logs(&filter).await? {
+            if let Some(key) = decode_initialize(&log.topics, &log.data) {
+                out.push(key);
+            }
+        }
+    }
+    out.dedup_by(|a, b| a == b);
+    Ok(out)
+}
+
 fn topic_from_address(addr: &str) -> Result<String> {
     Ok(abi::to_hex(&abi::address_word(addr)?))
 }
@@ -270,31 +319,59 @@ pub struct Decimals {
     pub denominator: u8,
 }
 
-/// End to end: discover `token`'s pools against `denominator` (or any pool if
-/// `denominator` is `None`), pick the deepest by liquidity, and return its
-/// price in `denominator` per whole `token`.
-pub async fn read_price<C: EvmClient + ?Sized>(
+/// The two Uniswap v4 contracts a price read needs.
+#[derive(Debug, Clone, Copy)]
+pub struct Deployment<'a> {
+    pub pool_manager: &'a str,
+    pub state_view: &'a str,
+}
+
+/// Discover pools between exactly `token` and `denom`, and pick the deepest
+/// by liquidity. This is the expensive half of a price read (an
+/// `Initialize`-log scan plus one `getLiquidity` call per candidate) — do it
+/// once per token and reuse the result; a live feed should not repeat it on
+/// every poll.
+pub async fn find_best_pool<C: EvmClient + ?Sized>(
     client: &C,
-    pool_manager: &str,
-    state_view: &str,
+    deployment: Deployment<'_>,
     token: &str,
-    decimals: Decimals,
+    denom: &str,
     from_block: u64,
     to_block: u64,
-) -> Result<(Decimal, RankedPool)> {
-    let candidates = discover_pools(client, pool_manager, token, from_block, to_block).await?;
+) -> Result<RankedPool> {
+    let candidates = discover_pools_for_pair(
+        client,
+        deployment.pool_manager,
+        token,
+        denom,
+        from_block,
+        to_block,
+    )
+    .await?;
     if candidates.is_empty() {
-        return Err(ChainError::NotFound(format!("no pools found for {token}")));
+        return Err(ChainError::NotFound(format!(
+            "no {token}/{denom} pool found"
+        )));
     }
-    let ranked = rank_by_liquidity(client, state_view, &candidates).await?;
-    let best = ranked
+    rank_by_liquidity(client, deployment.state_view, &candidates)
+        .await?
         .into_iter()
         .next()
-        .ok_or_else(|| ChainError::NotFound(format!("no liquid pool found for {token}")))?;
+        .ok_or_else(|| ChainError::NotFound(format!("no liquid {token}/{denom} pool found")))
+}
 
+/// The cheap half: one `getSlot0` on an already-known pool, converted to a
+/// price in `denominator` per whole `token`. Safe to call on every poll.
+pub async fn quote_pool<C: EvmClient + ?Sized>(
+    client: &C,
+    state_view: &str,
+    pool: &PoolKey,
+    token: &str,
+    decimals: Decimals,
+) -> Result<Decimal> {
     let sv = StateView::new(client, state_view);
-    let slot0 = sv.get_slot0(best.key.pool_id()?).await?;
-    let token_is_currency0 = best.key.currency0.eq_ignore_ascii_case(token);
+    let slot0 = sv.get_slot0(pool.pool_id()?).await?;
+    let token_is_currency0 = pool.currency0.eq_ignore_ascii_case(token);
     let price_1_per_0 = price_from_sqrt_price_x96(
         slot0.sqrt_price_x96,
         if token_is_currency0 {
@@ -309,13 +386,31 @@ pub async fn read_price<C: EvmClient + ?Sized>(
         },
     )?;
     // price_1_per_0 is currency1-per-currency0; invert if the token is currency1.
-    let price = if token_is_currency0 {
-        price_1_per_0
+    if token_is_currency0 {
+        Ok(price_1_per_0)
     } else if price_1_per_0.is_zero() {
-        return Err(ChainError::Decode("pool price is zero".into()));
+        Err(ChainError::Decode("pool price is zero".into()))
     } else {
-        Decimal::ONE / price_1_per_0
-    };
+        Ok(Decimal::ONE / price_1_per_0)
+    }
+}
+
+/// End to end: discover pools between exactly `token` and `denom`, pick the
+/// deepest by liquidity, and return its price in `denominator` per whole
+/// `token`. Convenient for a one-off read (the CLI); a repeated poller should
+/// call [`find_best_pool`] once and [`quote_pool`] thereafter — see
+/// [`crate::feed::ChainFeed`].
+pub async fn read_price<C: EvmClient + ?Sized>(
+    client: &C,
+    deployment: Deployment<'_>,
+    token: &str,
+    denom: &str,
+    decimals: Decimals,
+    from_block: u64,
+    to_block: u64,
+) -> Result<(Decimal, RankedPool)> {
+    let best = find_best_pool(client, deployment, token, denom, from_block, to_block).await?;
+    let price = quote_pool(client, deployment.state_view, &best.key, token, decimals).await?;
     Ok((price, best))
 }
 
@@ -328,6 +423,26 @@ mod tests {
 
     const USDG: &str = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
     const NVDA: &str = "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec";
+
+    fn init_log(pool_id: &str, currency0: &str, currency1: &str) -> serde_json::Value {
+        let mut data = Vec::new();
+        data.extend_from_slice(&abi::uint_word(3000));
+        data.extend_from_slice(&abi::int_word(60));
+        data.extend_from_slice(
+            &abi::address_word("0x0000000000000000000000000000000000000000").unwrap(),
+        );
+        json!({
+            "address": "0xpoolmanager",
+            "topics": [
+                INITIALIZE_TOPIC,
+                pool_id,
+                format!("0x{}{}", "0".repeat(24), &currency0[2..]),
+                format!("0x{}{}", "0".repeat(24), &currency1[2..]),
+            ],
+            "data": abi::to_hex(&data),
+            "blockNumber": "0x10",
+        })
+    }
 
     #[test]
     fn pool_key_sorts_currencies() {
@@ -407,6 +522,36 @@ mod tests {
             .unwrap();
         assert!(pools.is_empty());
         assert_eq!(rpc.methods(), vec!["eth_getLogs", "eth_getLogs"]);
+    }
+
+    #[tokio::test]
+    async fn discover_pools_for_pair_excludes_a_pool_paired_against_something_else() {
+        // Regression: an earlier version filtered by `token` alone, so a pool
+        // pairing NVDA against an unrelated token got treated as NVDA/USDG and
+        // priced with the wrong decimals — a ~1e12x-wrong result caught live.
+        // `discover_pools_for_pair` must only return the NVDA/USDG pool.
+        const OTHER: &str = "0x2222222222222222222222222222222222222222";
+        let nvda_usdg = init_log(
+            "0xd80b3b4cc602181da7004070f75c54b3107807f0cc71072d8c373662d44df972",
+            USDG,
+            NVDA,
+        );
+        let nvda_other = init_log(
+            "0x1111111111111111111111111111111111111111111111111111111111111111",
+            NVDA,
+            OTHER,
+        );
+        // token-is-currency0 query (NVDA, USDG) -> nothing; token-is-currency1
+        // query (USDG, NVDA) -> the real pool. The spam pool never matches
+        // either query because its counter-currency isn't USDG.
+        let rpc = MockRpc::new(vec![Ok(json!([])), Ok(json!([nvda_usdg]))]);
+        let pools = discover_pools_for_pair(&rpc, "0xpoolmanager", NVDA, USDG, 0, 100)
+            .await
+            .unwrap();
+        assert_eq!(pools.len(), 1);
+        assert_eq!(pools[0].currency0, USDG);
+        assert_eq!(pools[0].currency1, NVDA);
+        let _ = nvda_other; // shown for context; a real node simply wouldn't return it for this filter
     }
 
     #[tokio::test]

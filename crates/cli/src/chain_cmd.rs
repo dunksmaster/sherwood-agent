@@ -9,23 +9,9 @@
 
 use anyhow::{Context, Result};
 use sherwood_chain::probe::{check_transfer_open, ProbeOptions, Verdict};
+use sherwood_chain::tokens::{self, DEFAULT_RPC};
 use sherwood_chain::{EvmClient, HttpClient};
 use std::time::Duration;
-
-/// Robinhood Chain Stock Token addresses (ADR-0006 — cross-checked across two
-/// independent public write-ups). A convenience for the CLI; not authoritative.
-const KNOWN: &[(&str, &str)] = &[
-    ("NVDA", "0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC"),
-    ("TSLA", "0x322F0929c4625eD5bAd873c95208D54E1c003b2d"),
-    ("AAPL", "0xaF3D76f1834A1d425780943C99Ea8A608f8a93f9"),
-    ("MSFT", "0xe93237C50D904957Cf27E7B1133b510C669c2e74"),
-    ("AMZN", "0x12f190a9F9d7D37a250758b26824B97CE941bF54"),
-    ("GOOGL", "0x2e0847E8910a9732eB3fb1bb4b70a580ADAD4FE3"),
-    ("META", "0xc0D6457C16Cc70d6790Dd43521C899C87ce02f35"),
-    ("SPY", "0x117cc2133c37B721F49dE2A7a74833232B3B4C0C"),
-];
-
-const DEFAULT_RPC: &str = "https://rpc.mainnet.chain.robinhood.com";
 
 pub async fn run(args: impl Iterator<Item = String>) -> Result<()> {
     let mut positional = args.peekable();
@@ -48,7 +34,7 @@ pub async fn run(args: impl Iterator<Item = String>) -> Result<()> {
 
     let mut all_permissionless = true;
     for t in &targets {
-        let addr = resolve(t);
+        let (_, addr, _) = tokens::resolve(t);
         match check_transfer_open(&client, &addr, &ProbeOptions::default()).await {
             Ok(report) => {
                 println!("{report}\n");
@@ -67,11 +53,4 @@ pub async fn run(args: impl Iterator<Item = String>) -> Result<()> {
     } else {
         anyhow::bail!("a probed token is restricted or the probe was inconclusive (see above)");
     }
-}
-
-fn resolve(token: &str) -> String {
-    KNOWN
-        .iter()
-        .find(|(sym, _)| sym.eq_ignore_ascii_case(token))
-        .map_or_else(|| token.to_owned(), |(_, addr)| (*addr).to_owned())
 }

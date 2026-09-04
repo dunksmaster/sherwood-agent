@@ -90,3 +90,13 @@ max_session_duration_secs = 0
 read_tools   = []   # e.g. ["get_account", "get_positions", "get_quotes"]
 place_tools  = []   # e.g. ["place_order"]  — parsed and risk-checked before allow
 cancel_tools = []   # e.g. ["cancel_order"] — allowed without a risk check
+
+[chain]
+# A live price feed off Robinhood Chain (ADR-0006) instead of feed_path/the demo
+# feed. STILL PAPER TRADING — this only supplies prices; no wallet, no signing,
+# no order ever reaches the venue. See docs/ROBINHOOD-CHAIN.md.
+enabled = false
+# rpc_url = "https://rpc.mainnet.chain.robinhood.com"  # default if omitted
+symbols = []                # e.g. ["NVDA", "TSLA"] — known symbols or raw addresses
+denom   = "USDG"            # every price is quoted in this token
+poll_interval_secs = 15     # seconds between completing one round of all symbols and the next
