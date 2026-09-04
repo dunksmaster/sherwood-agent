@@ -17,8 +17,10 @@ The local control-plane dashboard. Lives in [`frontend/`](../frontend/README.md)
   MIT and can be vendored later if the surface grows; for now the app is small
   enough that a stylesheet is less machinery than a component library.
 - ESLint flat config (`@eslint/js` + `typescript-eslint` + `react-hooks`).
-- No data-fetching library — a `usePoll` hook over `fetch`, polling every 4s.
-  This is a single-operator loopback panel; a WebSocket replaces polling at S9d.
+- No data-fetching library — a `usePoll` hook over `fetch` for the snapshot
+  views, and a `fetch`-based SSE reader (`useAuditStream`) for the activity feed
+  off `GET /v1/events`. `EventSource` isn't used because it can't send an
+  `Authorization` header. SSE, not a WebSocket — the feed is one-directional.
 
 State management is component-local `useState`; there is no store. If that stops
 scaling it becomes ADR-0006 — not before.
@@ -70,7 +72,7 @@ between `frontend/vite.config.ts` and `sherwood_server::DASHBOARD_CSP`.
 |---|---|---|
 | Status bar — mode, kill switch, uptime | `GET /v1/health` | done |
 | Portfolio — cash, realized P&L, positions | `GET /v1/portfolio` | done |
-| Activity — recent audit events, fill count, chain-integrity badge | `GET /v1/activity`, `GET /v1/audit/verify` | done |
+| Activity — audit events (live via SSE), fill count, chain-integrity badge | `GET /v1/events`, `GET /v1/activity`, `GET /v1/audit/verify` | done |
 | Controls — kill switch, PAPER/LIVE toggle | `POST /v1/kill`, `POST /v1/mode` | done |
 | Config editor | — | pending (needs a config API) |
 | Approvals queue | — | pending (S11) |

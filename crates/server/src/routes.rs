@@ -8,6 +8,7 @@
 //! | `GET`  | `/v1/portfolio` | viewer | last persisted portfolio snapshot |
 //! | `GET`  | `/v1/activity` | viewer | recent audit events + fill count |
 //! | `GET`  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
+//! | `GET`  | `/v1/events` | viewer | SSE — new audit-chain rows as they land |
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -21,6 +22,7 @@
 
 use axum::extract::{Query, State};
 use axum::http::header::CONTENT_TYPE;
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::Json;
 use chrono::{DateTime, Utc};
@@ -29,6 +31,12 @@ use serde::{Deserialize, Serialize};
 use sherwood_core::{Asset, GateContext, Portfolio};
 use sherwood_execution::{HookGate, HookOutcome, ToolCall};
 use sherwood_store::{AuditEvent, AuditVerification, SqliteStore, Store};
+use std::convert::Infallible;
+use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use tokio_stream::wrappers::IntervalStream;
+use tokio_stream::{Stream, StreamExt};
 
 use crate::auth::{Caller, Role};
 use crate::error::{ApiError, ApiResult};
@@ -343,4 +351,49 @@ pub async fn get_audit_verify(
             }
         }
     }))
+}
+
+/// How often the SSE stream polls the store for new audit rows.
+const EVENTS_POLL: Duration = Duration::from_millis(1500);
+
+/// `GET /v1/events` — a Server-Sent Events stream. Each tick emits an `audit`
+/// event whose data is a JSON array of audit-chain rows appended since the last
+/// tick (an empty array when nothing changed — the connection also gets a
+/// keep-alive comment). Read-only and one-directional: exactly the shape of an
+/// activity feed, and it rides the same auth middleware as every other route.
+///
+/// SSE rather than a WebSocket because the feed only ever flows server→client,
+/// browsers reconnect it natively, and there is no upgrade handshake to secure
+/// separately. When the run loop is later hosted in-process it can push live
+/// `sherwood-events` onto this same stream.
+pub async fn get_events(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Sse<impl Stream<Item = Result<SseEvent, Infallible>>>> {
+    caller.require(Role::Viewer)?;
+
+    let store = state.store.clone();
+    let last_seq = Arc::new(AtomicI64::new(0));
+
+    let stream = IntervalStream::new(tokio::time::interval(EVENTS_POLL)).map(move |_| {
+        let store = store.clone();
+        let last_seq = last_seq.clone();
+        (store, last_seq)
+    });
+    // `then` turns each tick into the async DB read.
+    let stream = stream.then(|(store, last_seq)| async move {
+        let rows = match &store {
+            Some(s) => s.audit_tail(200).await.unwrap_or_default(),
+            None => Vec::new(),
+        };
+        let since = last_seq.load(Ordering::Relaxed);
+        let fresh: Vec<AuditEvent> = rows.into_iter().filter(|r| r.seq > since).collect();
+        if let Some(max) = fresh.iter().map(|r| r.seq).max() {
+            last_seq.store(max, Ordering::Relaxed);
+        }
+        let data = serde_json::to_string(&fresh).unwrap_or_else(|_| "[]".to_string());
+        Ok(SseEvent::default().event("audit").data(data))
+    });
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
