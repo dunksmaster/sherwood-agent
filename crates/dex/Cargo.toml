@@ -1,0 +1,26 @@
+[package]
+name = "sherwood-dex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Uniswap v4 swap construction on Robinhood Chain (ADR-0006, v0.2.4): quote
+# bounds (slippage/deadline) and UniversalRouter calldata for an exact-input
+# single-pool swap, plus the two Permit2 approval calls it depends on. This
+# crate builds calldata and, via sherwood-signer, can sign it — it has no RPC
+# client and no method that broadcasts anything.
+
+[dependencies]
+sherwood-chain = { path = "../chain" }
+sherwood-signer = { path = "../signer" }
+thiserror.workspace = true
+hex.workspace = true
+sha3 = { version = "0.10", default-features = false }
+rust_decimal.workspace = true
+
+[dev-dependencies]
+rust_decimal_macros.workspace = true
+
+[lints]
+workspace = true

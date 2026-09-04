@@ -19,6 +19,7 @@ sherwood-decision = { path = "../decision", features = ["openai"] }
 sherwood-chain = { path = "../chain" }
 sherwood-signer = { path = "../signer" }
 sherwood-wallets = { path = "../wallets" }
+sherwood-dex = { path = "../dex" }
 sherwood-server = { path = "../server" }
 sherwood-copytrade = { path = "../copytrade" }
 sherwood-sniper = { path = "../sniper" }

@@ -12,6 +12,7 @@ mod backup_cmd;
 mod chain_cmd;
 mod chain_price_cmd;
 mod config;
+mod dex_simulate_cmd;
 mod feed;
 mod runner;
 mod secrets_cmd;
@@ -39,7 +40,8 @@ fn usage() -> ! {
          sherwood chain-probe [rpc-url] [token ...]  read-only Robinhood Chain transfer pre-flight\n  \
          sherwood chain-price [rpc-url] [token] [denom]  read a live Stock Token price off-chain\n  \
          sherwood wallet-address <secret-name>  derive + print a wallet address from a vault key\n  \
-         sherwood wallets <config.toml>  load [[wallets]] and print name/address/budget per wallet\n"
+         sherwood wallets <config.toml>  load [[wallets]] and print name/address/budget per wallet\n  \
+         sherwood dex-simulate <from> <token> <amount_raw> [denom] [bps] [rpc]  eth_call-simulate a swap (signs/sends nothing)\n"
     );
     std::process::exit(2);
 }
@@ -101,6 +103,7 @@ async fn main() -> Result<()> {
         Some("secrets") => secrets_cmd::run(args),
         Some("chain-probe") => chain_cmd::run(args).await,
         Some("chain-price") => chain_price_cmd::run(args).await,
+        Some("dex-simulate") => dex_simulate_cmd::run(args).await,
         Some("wallet-address") => wallet_cmd::run(args),
         Some("demo") => runner::demo(&shutdown).await,
         Some("run") => {

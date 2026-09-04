@@ -12,6 +12,7 @@ members = [
     "crates/chain",
     "crates/signer",
     "crates/wallets",
+    "crates/dex",
     "crates/server",
     "crates/cli",
 ]

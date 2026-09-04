@@ -1921,6 +1921,7 @@ dependencies = [
  "sherwood-copytrade",
  "sherwood-core",
  "sherwood-decision",
+ "sherwood-dex",
  "sherwood-events",
  "sherwood-execution",
  "sherwood-secrets",
@@ -1979,6 +1980,19 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sherwood-dex"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "sha3",
+ "sherwood-chain",
+ "sherwood-signer",
+ "thiserror",
 ]
 
 [[package]]
