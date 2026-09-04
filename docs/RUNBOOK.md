@@ -41,7 +41,8 @@ Robinhood MCP is the venue's; the hook only blocks *new* calls **(v0.2 / S7.4)**
 |---|---|---|
 | Hook denies every order | `GET /v1/session` — `breached: true`? | `POST /v1/session/reset` (admin + re-auth). Confirm the caps are what you want in `[server]`. |
 | Hook denies every order, session not breached | `GET /v1/health` — `kill_switch: true`? | Release the kill switch (above). |
-| Orders sit in `manual` approval | `GET /v1/approvals` | Approve / deny each, or `POST /v1/mode`-style is not it — switch `approval_mode` in config + restart for `auto`. Pending approvals auto-deny after `approval_timeout_secs`. |
+| Orders sit in `manual` approval | `GET /v1/approvals` | Approve / deny each. To stop holding new orders: set `approval_mode = "auto"` in `config.toml` and `POST /v1/config/reload` (admin + re-auth) — no restart. Pending approvals still auto-deny after `approval_timeout_secs`. |
+| Risk caps or the tool allowlist are wrong | — | Edit `config.toml`, then `POST /v1/config/reload`. A bad edit is rejected with the validation error and nothing changes. `bind` / tokens / CORS / `static_dir` / session-budget caps still need a restart. |
 | `GET /v1/audit/verify` → `ok: false` | note `broken_at` | The state DB was altered outside the app, or is corrupt. Stop the server. Restore from backup (below). Do **not** keep trading against a broken chain. |
 | Dashboard can't reach the API | `curl -s localhost:8787/v1/health` | Server down, or bound elsewhere — check `[server] bind` and the process. `401` means the token is wrong: `sherwood secrets get api_token`. |
 | `429` from the API | rate limit | One client is hammering it; raise `[server] rate_limit_per_min` or `0` to disable. |

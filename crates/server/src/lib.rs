@@ -2,8 +2,9 @@
 //!
 //! Loopback bind, bearer auth with three RBAC roles, one error envelope, a
 //! global rate limit, CORS for the dashboard origin, Prometheus metrics, an SSE
-//! event feed, the approval gate ([ADR-0005]), and (optionally) the built
-//! dashboard. Generated OpenAPI is the remaining S9e task.
+//! event feed, the approval gate ([ADR-0005]), a `POST /v1/config/reload`, and
+//! (optionally) the built dashboard. `docs/API.md` is the API contract (no
+//! generated OpenAPI — see the 2026-09-04 decision log).
 //!
 //! [ADR-0005]: ../../../docs/adr/0005-approval-gate.md
 //!
@@ -20,6 +21,7 @@
 //! | POST | `/v1/approvals/{id}` | operator | approve / deny a pending order |
 //! | GET  | `/v1/session` | viewer | per-session budget usage |
 //! | POST | `/v1/session/reset` | admin + body re-auth | zero the session budget |
+//! | POST | `/v1/config/reload` | admin + body re-auth | re-read `config.toml` → risk / allowlist / approval mode |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -107,6 +109,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/approvals/{id}", post(routes::post_approval))
         .route("/v1/session", get(routes::get_session))
         .route("/v1/session/reset", post(routes::post_session_reset))
+        .route("/v1/config/reload", post(routes::post_config_reload))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
@@ -144,7 +147,8 @@ where
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let bound = listener.local_addr()?;
-    tracing::info!(%bound, mode = ?state.approval_mode, "sherwood-server listening");
+    let approval_mode = state.control.read().await.approval_mode;
+    tracing::info!(%bound, ?approval_mode, "sherwood-server listening");
 
     // Auto-deny approvals that outlive the timeout even if no hook is waiting on
     // them (e.g. the agent gave up on its request). A daemon task; the runtime
@@ -255,6 +259,24 @@ mod tests {
 
     fn test_state() -> AppState {
         state_with(ServerOpts::default())
+    }
+
+    /// A reloader that swaps in a kill-switch-off risk config, an allowlist with
+    /// only `wire_now` (a place tool), and `Manual` approval mode.
+    fn reloading_state() -> AppState {
+        use crate::state::Reloaded;
+        state_with(ServerOpts::default()).with_reloader(std::sync::Arc::new(|| {
+            Ok(Reloaded {
+                risk: RiskGate::new(RiskConfig {
+                    max_order_notional: dec!(10_000),
+                    max_position_fraction: dec!(1),
+                    kill_switch: false,
+                    ..RiskConfig::default()
+                }),
+                allowlist: ToolAllowlist::from_pairs([("wire_now", ToolClass::PlaceOrder)]),
+                approval_mode: crate::approvals::ApprovalMode::Manual,
+            })
+        }))
     }
 
     /// An in-memory store holding one portfolio snapshot with an open position
@@ -841,6 +863,85 @@ mod tests {
             resp.headers().get("content-type").unwrap(),
             "text/event-stream"
         );
+    }
+
+    #[tokio::test]
+    async fn config_reload_swaps_risk_allowlist_and_mode_and_keeps_the_kill_switch() {
+        let state = reloading_state();
+
+        // Engage the kill switch first — a reload must not clear it.
+        let r = call(
+            state.clone(),
+            post(
+                "/v1/kill",
+                Some(ADMIN),
+                serde_json::json!({ "engage": true, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::OK);
+
+        let r = call(
+            state.clone(),
+            post(
+                "/v1/config/reload",
+                Some(ADMIN),
+                serde_json::json!({ "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::OK);
+        let b = body_string(r).await;
+        assert!(b.contains("\"approval_mode\":\"manual\""), "{b}");
+        assert!(b.contains("\"kill_switch\":true"), "{b}"); // preserved despite the file saying false
+        assert!(b.contains("\"allowlisted_tools\":1"), "{b}");
+
+        // The new allowlist is in force: the old `place_order` name is gone.
+        let body = serde_json::json!({
+            "tool_call": { "name": "place_order", "arguments": {} },
+            "context": ctx_json()
+        });
+        let r = call(state, post("/v1/hook/pretooluse", Some(OPERATOR), body)).await;
+        assert!(body_string(r).await.contains("not on the allowlist"));
+    }
+
+    #[tokio::test]
+    async fn config_reload_needs_admin_reauth_and_a_configured_reloader() {
+        // No reloader configured → 422.
+        let r = call(
+            test_state(),
+            post(
+                "/v1/config/reload",
+                Some(ADMIN),
+                serde_json::json!({ "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::UNPROCESSABLE_ENTITY);
+
+        // Viewer role → 403.
+        let r = call(
+            reloading_state(),
+            post(
+                "/v1/config/reload",
+                Some(VIEWER),
+                serde_json::json!({ "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+
+        // Wrong body re-auth → 403.
+        let r = call(
+            reloading_state(),
+            post(
+                "/v1/config/reload",
+                Some(ADMIN),
+                serde_json::json!({ "reauth": "nope" }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
     }
 
     #[tokio::test]

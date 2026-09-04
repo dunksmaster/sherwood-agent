@@ -106,9 +106,9 @@ from `GRADE-TARGET.md`.
 | S1.5 | External anchoring of the chain head | `store` | deferred (hardening) |
 | S1.6 | `Portfolio` is `serde`-serialisable; JSON round-trip test; wired into `run` (resume from snapshot, persist fills + audit + exit snapshot) | `core`, `store`, `cli` | done |
 | S2.1 | `AppConfig` with real validation — range checks, overlap checks, actionable errors | `cli` | done (Pre-S0) |
-| S2.2 | Config reload via `notify`, broadcasting a change event | `config` | deferred to S4 — no long-lived config consumer yet |
-| S2.3 | Config schema versioning with migration stubs | `config` | deferred to S4 |
-| S2.4 | Secret references resolved at load time, never stored inline | `config` | deferred to S6 — needs the secrets vault |
+| S2.2 | Runtime config reload — `POST /v1/config/reload` (admin + re-auth) re-reads and re-validates `config.toml` and swaps in the new `[risk]` config, `[hook]` allowlist, and `approval_mode` under one lock; the runtime kill switch is preserved (a reload can engage it, never dis-engage). `bind` / tokens / CORS / `static_dir` / budget caps still need a restart. A `notify` file-watch is a later refinement — an explicit trigger is enough for a single operator. | `server`, `cli` | done |
+| S2.3 | Config schema versioning with migration stubs | `config` | deferred — one config version so far; revisit if a breaking `config.toml` change lands |
+| S2.4 | Secret references resolved at load time, never stored inline | `config` | done (S6) — `resolve_ref` for `vault:NAME`; `ai.api_key` / `server.*_token_ref` are validated to be `vault:` refs |
 | S3.1 | Event bus — `broadcast`, bounded 1000, backpressure policy, `Bus` handle | `events` | done |
 | S3.2 | `Event` (real emitters + consumers only), versioned `Envelope` ([ADR-0004](adr/0004-event-schema-versioning.md)) | `events` | done |
 | S3.3 | `Subscriber` trait + `run_subscriber`; `TracingSubscriber`; `StoreSubscriber`; run loop publishes instead of calling the store | `events`, `store`, `cli` | done |

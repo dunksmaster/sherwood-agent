@@ -32,11 +32,17 @@ impl Mode {
     }
 }
 
-/// The parts of the server that change at runtime. Held behind one `RwLock` so
-/// the mode toggle and the kill switch are a single, consistent write.
+/// The parts of the server that change at runtime — the mode toggle, the kill
+/// switch, and a `POST /v1/config/reload`. Held behind one `RwLock` so each is
+/// a single consistent write.
 pub struct Control {
     pub mode: Mode,
     pub risk: RiskGate,
+    /// Which agent MCP tools may be called, and how each is classified.
+    pub allowlist: ToolAllowlist,
+    /// `Auto` = the approval gate is transparent; `Manual` = every risk-passing
+    /// order waits for the operator.
+    pub approval_mode: ApprovalMode,
 }
 
 impl Control {
@@ -44,6 +50,17 @@ impl Control {
         self.risk.config().kill_switch
     }
 }
+
+/// The subset of config a `POST /v1/config/reload` may swap in without a
+/// restart. Built by the CLI from a re-read, re-validated `config.toml`.
+pub struct Reloaded {
+    pub risk: RiskGate,
+    pub allowlist: ToolAllowlist,
+    pub approval_mode: ApprovalMode,
+}
+
+/// Re-reads and re-validates the config file, or returns why it could not.
+pub type Reloader = Arc<dyn Fn() -> Result<Reloaded, String> + Send + Sync>;
 
 /// Knobs that come from `[server]` config.
 #[derive(Debug, Clone)]
@@ -84,8 +101,6 @@ impl Default for ServerOpts {
 #[derive(Clone)]
 pub struct AppState {
     pub tokens: Arc<TokenSet>,
-    /// Which agent MCP tools may be called, and how each is classified.
-    pub allowlist: Arc<ToolAllowlist>,
     pub control: Arc<RwLock<Control>>,
     pub metrics: Arc<Metrics>,
     pub limiter: Arc<RateLimiter>,
@@ -97,8 +112,10 @@ pub struct AppState {
     /// Built dashboard directory, if the server should serve it.
     pub static_dir: Option<Arc<std::path::PathBuf>>,
     pub approvals: Arc<ApprovalStore>,
-    pub approval_mode: ApprovalMode,
     pub budget: Arc<SessionBudget>,
+    /// Re-reads `config.toml` for `POST /v1/config/reload`. `None` = reload is
+    /// unavailable (e.g. tests).
+    pub reloader: Option<Reloader>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -112,10 +129,11 @@ impl AppState {
     ) -> Self {
         Self {
             tokens: Arc::new(tokens),
-            allowlist: Arc::new(allowlist),
             control: Arc::new(RwLock::new(Control {
                 mode: Mode::Paper,
                 risk,
+                allowlist,
+                approval_mode: opts.approval_mode,
             })),
             metrics: Arc::new(Metrics::default()),
             limiter: Arc::new(RateLimiter::per_minute(opts.rate_limit_per_min)),
@@ -124,10 +142,16 @@ impl AppState {
             cors_origins: Arc::new(opts.cors_origins),
             static_dir: opts.static_dir.map(Arc::new),
             approvals: Arc::new(ApprovalStore::new(opts.approval_timeout)),
-            approval_mode: opts.approval_mode,
             budget: Arc::new(SessionBudget::new(opts.budget_caps)),
+            reloader: None,
             started_at: Utc::now(),
         }
+    }
+
+    #[must_use]
+    pub fn with_reloader(mut self, reloader: Reloader) -> Self {
+        self.reloader = Some(reloader);
+        self
     }
 
     pub fn uptime_secs(&self) -> i64 {

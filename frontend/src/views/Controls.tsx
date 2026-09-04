@@ -81,6 +81,13 @@ export function Controls({
         >
           Switch to {mode === "paper" ? "LIVE" : "PAPER"}
         </button>
+        <button
+          disabled={!canAct}
+          onClick={() => void act(() => api.reloadConfig(token, reauth))}
+          title="Re-read config.toml — risk caps, tool allowlist, approval mode"
+        >
+          Reload config
+        </button>
       </div>
       {msg && <p className="err">{msg}</p>}
       <p className="muted" style={{ marginTop: 12, fontSize: 12 }}>
