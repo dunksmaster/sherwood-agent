@@ -1,0 +1,27 @@
+[package]
+name = "sherwood-signer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# secp256k1 key custody + EIP-1559 transaction signing for Robinhood Chain
+# (ADR-0006, v0.2.2). Sign-local: this crate produces signed transaction
+# bytes and nothing else — it has no RPC client and no method that
+# broadcasts anything. See docs/LIVE_EXECUTION.md.
+
+[dependencies]
+sherwood-secrets = { path = "../secrets" }
+thiserror.workspace = true
+hex.workspace = true
+sha3 = { version = "0.10", default-features = false }
+zeroize = { version = "1", features = ["zeroize_derive"] }
+k256 = { version = "0.13", default-features = false, features = [
+    "ecdsa",
+    "std",
+] }
+
+[dev-dependencies]
+
+[lints]
+workspace = true

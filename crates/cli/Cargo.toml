@@ -17,6 +17,7 @@ sherwood-secrets = { path = "../secrets" }
 sherwood-execution = { path = "../execution" }
 sherwood-decision = { path = "../decision", features = ["openai"] }
 sherwood-chain = { path = "../chain" }
+sherwood-signer = { path = "../signer" }
 sherwood-server = { path = "../server" }
 sherwood-copytrade = { path = "../copytrade" }
 sherwood-sniper = { path = "../sniper" }
