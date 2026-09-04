@@ -1,0 +1,34 @@
+[package]
+name = "sherwood-chain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Read-only EVM JSON-RPC client for Robinhood Chain (ADR-0006). This crate does
+# I/O but never builds, signs, or sends a transaction — every method is an
+# `eth_call` / `eth_getLogs` / `eth_getCode` / `eth_getStorageAt` / `eth_*` read.
+# Signing lands in `sherwood-signer` (v0.2.2), gated separately.
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+async-trait.workspace = true
+hex.workspace = true
+sha3 = { version = "0.10", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "rustls-tls",
+    "http2",
+    "charset",
+] }
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

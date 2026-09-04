@@ -9,6 +9,7 @@ members = [
     "crates/copytrade",
     "crates/sniper",
     "crates/decision",
+    "crates/chain",
     "crates/server",
     "crates/cli",
 ]
