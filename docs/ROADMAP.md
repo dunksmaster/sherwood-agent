@@ -6,23 +6,34 @@ owner-step: S0
 
 # Roadmap
 
-> **v0.1 scope met (2026-09-04).** S0–S15 are done for a **paper** release — see
-> [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md). S9e is closed (no generated
-> OpenAPI). Remaining rows below marked *deferred* / *pending* are v0.2, gated on
-> a live Robinhood MCP connection. Cutting the `v0.1.0` tag is the operator's
-> call (S16).
+> **v0.1 shipped (2026-09-04).** S0–S16 done for a **paper** release: `v0.1.0`
+> [tagged and released](https://github.com/dunksmaster/sherwood-agent/releases/tag/v0.1.0).
+> See [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md). S9e is closed (no
+> generated OpenAPI).
+>
+> **v0.2 re-targeted (2026-09-04):** live venue is now Robinhood Chain, not the
+> Agentic MCP (US/EEA-gated) and not Solana —
+> [ADR-0006](adr/0006-robinhood-chain-venue.md). Rows marked *deferred* /
+> *pending* below are v0.2.
 
 ## Direction
 
-**v0.1 targets the Robinhood Agentic Trading MCP only.** No Solana, no wallets, no private
-keys — Robinhood authenticates over OAuth and custodies the assets.
+**v0.1 targets the Robinhood Agentic Trading MCP** (paper only). No wallets, no private
+keys — Robinhood authenticates over OAuth and custodies the assets. This stays the
+documented path for anyone who has that MCP.
 
-**v0.2 adds Solana** as additive modules in this same repository, behind the same `Executor`
-and feed traits. It is not a rewrite.
+**v0.2's live venue is Robinhood Chain** — Robinhood's permissionless Ethereum L2 (chain id
+`4663`), traded through Uniswap v4 from a self-custody wallet. This replaces the earlier
+"v0.2 adds Solana" plan: the Agentic MCP is US/EEA-gated and unavailable to the operator,
+whereas Stock Token transfers on Robinhood Chain were verified permissionless at the token
+contract ([ADR-0006](adr/0006-robinhood-chain-venue.md),
+[`scripts/rhc-probe.mjs`](../scripts/rhc-probe.mjs)). The Solana module *shapes* (RPC
+abstraction, signer isolation, wallet registry, router) carry over to EVM; only the chain
+client and swap construction are new.
 
-The two are kept in one repo because the core — types, `RiskGate`, `Portfolio`, decision
-layer, server, dashboard, approvals, scheduler, audit — is shared. Only the venue adapters
-differ, and those are already isolated behind traits.
+Both venues live in one repo because the core — types, `RiskGate`, `Portfolio`, decision
+layer, server, dashboard, approvals, scheduler, audit — is shared and venue-agnostic. Only
+the adapters differ, and those are already isolated behind traits.
 
 ## MVP — v0.1
 
@@ -37,8 +48,9 @@ toggle.
 
 ### Explicitly not in v0.1
 
-Solana · sniper · copy-trading · multi-user · cloud or multi-node deployment · dynamic
-strategy plugin loading · HSM or hardware custody · compliance tooling.
+On-chain execution · wallet custody / private keys · sniper · copy-trading · multi-user ·
+cloud or multi-node deployment · dynamic strategy plugin loading · HSM or hardware custody ·
+compliance tooling. (On-chain execution is v0.2 — [ADR-0006](adr/0006-robinhood-chain-venue.md).)
 
 ## Phases
 
@@ -50,7 +62,7 @@ flowchart LR
     D --> R[S6-S8<br/>Robinhood]
     R --> O[S9-S13<br/>Ops shell]
     O --> H[S14-S16<br/>Hardening + release]
-    H --> V2[v0.2<br/>Solana]
+    H --> V2[v0.2<br/>Robinhood Chain]
 ```
 
 Each phase gates the next. **No code is written until S0 is complete and reviewed.**
@@ -202,18 +214,27 @@ reconciliation (S7.4), and driving the hook from a real headless `claude` / `cod
 | S15a | `sherwood backup <config> <dir>` / `sherwood restore <config> <backup-dir> [--force]` — copy the state DB (+ WAL sidecars) and the vault; `restore` won't clobber without `--force`. [RUNBOOK.md](RUNBOOK.md) written against what v0.1 actually has. | done |
 | S15b | Multi-stage `Dockerfile` (Rust → dashboard → `debian:slim`, non-root), `docker-compose.yml` (host-network `serve`), `DEPLOYMENT.md`, **threat-model sign-off** ([THREAT-MODEL.md](THREAT-MODEL.md#sign-off) → reviewed). Prometheus/Grafana stay on the host — the server is loopback-only. Image build not yet CI-gated. | done |
 | S15c | Reconnect / backoff stress tests, CI Docker-image build | pending — reconnect logic is S8 (live venue) |
-| S16 | v0.1 release — [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md) written, CHANGELOG `[0.1.0]` section cut, SBOM in CI. Remaining: `git tag -a v0.1.0` (signed if the operator has a key) + push + a GitHub release. | prepped — tag is the operator's |
+| S16 | v0.1 release — [RELEASE-NOTES-0.1.0.md](RELEASE-NOTES-0.1.0.md) written, CHANGELOG `[0.1.0]` section cut, SBOM in CI. **Done 2026-09-04:** `v0.1.0` tagged (`9249b1a`) and [released](https://github.com/dunksmaster/sherwood-agent/releases/tag/v0.1.0). | done |
 
-## v0.2 — Solana modules
+## v0.2 — Robinhood Chain (EVM)
 
-| Milestone | Crate |
-|---|---|
-| v0.2.1 | `sherwood-chain` — Solana RPC abstraction |
-| v0.2.2 | `sherwood-signer` — custody tiers, signer isolation |
-| v0.2.3 | `sherwood-wallets` — multi-wallet registry, per-strategy binding, spend ceilings |
-| v0.2.4 | `sherwood-sniper` — pool event source, Geyser feed, live `RugScreen` |
-| v0.2.5 | `sherwood-copytrade` — leader feed, swap decoding |
-| v0.2.6 | `sherwood-router` — venue selection by notional and risk |
+Venue decided in [ADR-0006](adr/0006-robinhood-chain-venue.md) after an on-chain probe
+([`scripts/rhc-probe.mjs`](../scripts/rhc-probe.mjs)) confirmed Stock Token transfers are
+permissionless at the contract. Replaces the earlier Solana plan; the module shapes carry
+over. `RiskGate` / approvals / budgets / audit / server / dashboard are unchanged.
+
+| Milestone | Crate / work | Notes |
+|---|---|---|
+| v0.2.0 | `rhc-probe` + ADR-0006 | done — venue verified, rescope accepted |
+| v0.2.1 | `sherwood-chain` — EVM JSON-RPC client (`alloy`), chain `4663` | **read half first**: connect, read a Uniswap v4 pool, derive a Stock Token price, feed the existing `PriceFeed` trait. No wallet, no signing. Also unlocks on-chain history for the backtester (supersedes S14b's quote loader). |
+| v0.2.2 | `sherwood-signer` — secp256k1 keys from the vault, sign-local / broadcast-explicit | threat-model signing section lands with this |
+| v0.2.3 | `sherwood-wallets` — multi-wallet registry, per-strategy binding, spend ceilings | shape unchanged from the Solana draft; EVM addresses |
+| v0.2.4 | `sherwood-dex` — Uniswap v4 quote + swap construction on Robinhood Chain | `slippage` / `deadline` / `minOut`; quote path usable in paper mode |
+| v0.2.5 | `sherwood-router` — AMM vs RFQ selection by notional | |
+| v0.2.6 | live-mode pre-flight — refuse to arm if `rhc-probe`'s fresh-address `transfer` sim stops passing | guards against an implementation upgrade adding an allowlist |
+
+Dropped from v0.2: `sherwood-sniper`, `sherwood-copytrade` — Solana-memecoin patterns, not
+tokenised-equity trading. May return later as EVM equivalents.
 
 ## Beyond v0.2
 

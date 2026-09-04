@@ -8,7 +8,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+- **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**
+  The Robinhood Agentic Trading MCP is US/EEA-gated and unavailable to the operator, so v0.2's
+  live venue becomes **Robinhood Chain** — Robinhood's permissionless Ethereum L2 (chain id
+  `4663`), traded via Uniswap v4 from a self-custody wallet. Replaces the planned Solana
+  modules; their shapes (EVM RPC client, signer isolation, wallet registry, router) carry
+  over. v0.1 paper is unchanged. New [`scripts/rhc-probe.mjs`](scripts/README.md) — a
+  read-only on-chain probe (signs nothing, sends nothing) that verified Stock Token
+  `transfer` is permissionless at the token contract: a fresh un-KYC'd address can receive
+  and move tokens, failures are balance-gated only, `paused()` is false, and there is deep
+  Uniswap v4 liquidity. The probe becomes the mandatory pre-flight before live mode arms.
 
 ## [0.1.0] - 2026-09-04
 

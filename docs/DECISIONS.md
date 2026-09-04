@@ -19,19 +19,35 @@ one rather than editing it.
 | [0003](adr/0003-storage-backend.md) | Storage backend | accepted 2026-09-03 | — |
 | [0004](adr/0004-event-schema-versioning.md) | Event schema versioning | accepted 2026-09-04 | — |
 | [0005](adr/0005-approval-gate.md) | Approval gate state machine | accepted 2026-09-04 | — |
+| [0006](adr/0006-robinhood-chain-venue.md) | v0.2 trades on Robinhood Chain (EVM), not Solana | accepted 2026-09-04 | part of 0001 |
 
 Planned, to be written when the step that needs them arrives:
 
 | ADR | Title | Written at |
 |---|---|---|
-| 0006 | Frontend state management | S10 (deferred — component-local `useState`, no store yet; see [FRONTEND-ARCH.md](FRONTEND-ARCH.md)) |
 | 0007 | Deployment and packaging | S15 |
+| 0008 | Frontend state management | when a store is actually needed (deferred — component-local `useState`; see [FRONTEND-ARCH.md](FRONTEND-ARCH.md)) |
 
 ## Decision log
 
 Decisions that shaped the project but do not each warrant a full ADR. Newest first.
 
 ### 2026-09-04
+
+**v0.1.0 released.** `v0.1.0` tagged at `9249b1a` and published as a GitHub
+release (paper only). CHANGELOG `[0.1.0]` matches the tag.
+
+**v0.2 venue: Robinhood Chain, not Solana ([ADR-0006](adr/0006-robinhood-chain-venue.md)).**
+The operator is in Albania — the Robinhood Agentic Trading MCP is US/EEA-gated
+and cannot be onboarded. Robinhood Chain (permissionless Ethereum L2, chain
+`4663`) is reachable from any wallet, and a read-only probe
+([`scripts/rhc-probe.mjs`](../scripts/rhc-probe.mjs)) confirmed Stock Token
+`transfer` is permissionless at the contract (failure is balance-gated only, no
+allowlist, `paused() == false`, deep Uniswap v4 liquidity). The Solana module
+plan is dropped; the module *shapes* carry over to EVM. v0.1 paper is unchanged.
+*Revisit if:* an implementation upgrade adds a transfer allowlist (the live-mode
+pre-flight re-runs the probe and refuses to arm if so), or the Agentic MCP opens
+to the operator's jurisdiction.
 
 **No generated OpenAPI for v0.1 (S9e closed).** `docs/API.md` is the maintained
 API contract. `utoipa` was evaluated and declined: it needs ~20 `ToSchema`

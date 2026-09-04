@@ -4,6 +4,32 @@
 |---|---|
 | `check-doc-links.py` | CI: verify every relative link in the Markdown docs resolves. |
 | `pretooluse-hook.mjs` | The `PreToolUse` hook for [ADR-0001](../docs/adr/0001-mcp-interaction-model.md) Option 3 — forwards an agent's tool call to `sherwood-server` and maps the allow/deny answer onto the agent CLI's permission schema. Fails closed. |
+| `rhc-probe.mjs` | Read-only recon of Robinhood Chain Stock Tokens for [ADR-0006](../docs/adr/0006-robinhood-chain-venue.md) — checks whether `transfer` is permissionless at the token contract. Signs nothing, sends nothing. |
+
+## `rhc-probe.mjs`
+
+Node ≥ 18 (uses `fetch`). No dependencies. Every call is `eth_call` /
+`eth_getLogs` / `eth_getCode` / `eth_getStorageAt` against a public RPC — it
+never builds, signs, or sends a transaction.
+
+```bash
+node scripts/rhc-probe.mjs                # NVDA (default)
+node scripts/rhc-probe.mjs TSLA AAPL SPY  # several
+RHC_RPC=https://your-rpc  node scripts/rhc-probe.mjs
+```
+
+For each token it reads the ERC-20 metadata, resolves the beacon-proxy
+implementation, samples recent `Transfer` traffic, and — the point of the
+script — simulates `transfer(<a fresh un-KYC'd address>, amount)` from a funded
+holder. Exit `0` means transfers came back permissionless (failure is
+balance-gated only); exit `1` means a restriction was detected or the run was
+inconclusive. It also locates the dominant AMM holder and prints its
+NVDA/WETH/USDG balances as a liquidity sanity check.
+
+Intended uses: the one-off venue check recorded in ADR-0006, and — later — the
+mandatory pre-flight before `sherwood` arms live mode (refuse if `transfer` to a
+fresh address stops simulating clean, i.e. an allowlist was added by an
+implementation upgrade).
 
 ## `pretooluse-hook.mjs`
 
