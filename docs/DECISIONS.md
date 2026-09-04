@@ -18,13 +18,13 @@ one rather than editing it.
 | [0002](adr/0002-ai-decision-mode.md) | AI decision mode | accepted 2026-09-03 | — |
 | [0003](adr/0003-storage-backend.md) | Storage backend | accepted 2026-09-03 | — |
 | [0004](adr/0004-event-schema-versioning.md) | Event schema versioning | accepted 2026-09-04 | — |
+| [0005](adr/0005-approval-gate.md) | Approval gate state machine | accepted 2026-09-04 | — |
 
 Planned, to be written when the step that needs them arrives:
 
 | ADR | Title | Written at |
 |---|---|---|
-| 0005 | Approval gate state machine | S11 |
-| 0006 | Frontend state management | S10 |
+| 0006 | Frontend state management | S10 (deferred — component-local `useState`, no store yet; see [FRONTEND-ARCH.md](FRONTEND-ARCH.md)) |
 | 0007 | Deployment and packaging | S15 |
 
 ## Decision log

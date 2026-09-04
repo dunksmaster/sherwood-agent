@@ -124,7 +124,10 @@ venue. It is treated as security-critical:
   under a hard stop, since it can only reduce exposure.
 - Authenticated with the local token; an unauthenticated hook call is denied and alerted.
 - Its own timeout must exceed the approval timeout, and the agent's hook timeout must exceed
-  both, or a slow human approval is silently converted into a denial.
+  both, or a slow human approval is silently converted into a denial. The approval gate
+  ([ADR-0005](adr/0005-approval-gate.md)) is implemented: in `manual` mode a risk-passing
+  order is held until the operator approves it, denies it, or `[server]
+  approval_timeout_secs` elapses (auto-deny). A server restart denies anything pending.
 
 ## Data at rest
 

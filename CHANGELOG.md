@@ -9,6 +9,16 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Approval gate (S11)** — a human-in-the-loop step between the risk gate and the venue
+  ([ADR-0005](docs/adr/0005-approval-gate.md)). `[server] approval_mode`: `auto` (default,
+  transparent — unchanged) or `manual`. In `manual` mode a risk-passing **place-order** call
+  creates a `pending` approval and `POST /v1/hook/pretooluse` holds its response until the
+  operator approves or denies it, or `approval_timeout_secs` (default 60) elapses and it
+  auto-denies. Reads and cancels are never held. New routes: `GET /v1/approvals`
+  (`{ mode, pending, approvals[] }`, viewer) and `POST /v1/approvals/{id}`
+  (`{ decision: "approve" | "deny", reason? }`, operator). A 5s sweeper expires stale
+  pendings even with no hook waiting. In-memory, capped history; a restart denies anything
+  pending. Dashboard gains an `Approvals` card with per-order Approve / Deny.
 - **Live event feed (S9d)** — `GET /v1/events` is a Server-Sent Events stream (viewer role,
   same bearer auth as every route). Each frame carries a JSON array of audit-chain rows
   appended since the last one; an empty array plus a keep-alive comment when nothing changed.

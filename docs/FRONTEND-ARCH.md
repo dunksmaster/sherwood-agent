@@ -74,6 +74,6 @@ between `frontend/vite.config.ts` and `sherwood_server::DASHBOARD_CSP`.
 | Portfolio — cash, realized P&L, positions | `GET /v1/portfolio` | done |
 | Activity — audit events (live via SSE), fill count, chain-integrity badge | `GET /v1/events`, `GET /v1/activity`, `GET /v1/audit/verify` | done |
 | Controls — kill switch, PAPER/LIVE toggle | `POST /v1/kill`, `POST /v1/mode` | done |
+| Approvals — pending order cards with Approve / Deny | `GET /v1/approvals`, `POST /v1/approvals/{id}` | done |
 | Config editor | — | pending (needs a config API) |
-| Approvals queue | — | pending (S11) |
 | Charts (P&L curve) | — | pending (library choice deferred until there is data to plot) |

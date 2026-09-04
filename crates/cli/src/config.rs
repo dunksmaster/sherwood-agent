@@ -288,6 +288,11 @@ pub struct ServerSection {
     /// Directory of the built dashboard (`frontend/dist`) to serve at `/`.
     /// Absent = API only.
     pub static_dir: Option<PathBuf>,
+    /// `"auto"` = the approval gate is transparent (the risk gate decides).
+    /// `"manual"` = every risk-passing order waits for the operator.
+    pub approval_mode: String,
+    /// Seconds a pending approval waits before it auto-denies.
+    pub approval_timeout_secs: u64,
 }
 
 impl Default for ServerSection {
@@ -301,18 +306,24 @@ impl Default for ServerSection {
             rate_limit_per_min: 120,
             cors_origins: Vec::new(),
             static_dir: None,
+            approval_mode: "auto".into(),
+            approval_timeout_secs: 60,
         }
     }
 }
 
 impl ServerSection {
-    /// The runtime knobs `sherwood-server` needs.
+    /// The runtime knobs `sherwood-server` needs. `validate()` has already
+    /// checked `approval_mode`, so the fallback here is unreachable.
     pub fn to_opts(&self) -> sherwood_server::ServerOpts {
         sherwood_server::ServerOpts {
             allow_live: self.allow_live,
             rate_limit_per_min: self.rate_limit_per_min,
             cors_origins: self.cors_origins.clone(),
             static_dir: self.static_dir.clone(),
+            approval_mode: sherwood_server::approvals::ApprovalMode::parse(&self.approval_mode)
+                .unwrap_or(sherwood_server::approvals::ApprovalMode::Auto),
+            approval_timeout: std::time::Duration::from_secs(self.approval_timeout_secs.max(1)),
         }
     }
 
@@ -325,6 +336,12 @@ impl ServerSection {
                     dir
                 );
             }
+        }
+        if !matches!(self.approval_mode.as_str(), "auto" | "manual") {
+            bail!(
+                "server.approval_mode must be \"auto\" or \"manual\", got {:?}",
+                self.approval_mode
+            );
         }
         let addr: std::net::SocketAddr = self
             .bind
@@ -526,6 +543,16 @@ mod tests {
         let mut c = base();
         c.server.bind = "not-an-addr".into();
         assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_an_unknown_approval_mode() {
+        let mut c = base();
+        c.server.approval_mode = "yolo".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("approval_mode"), "{err}");
+        c.server.approval_mode = "manual".into();
+        assert!(c.validate().is_ok());
     }
 
     #[test]

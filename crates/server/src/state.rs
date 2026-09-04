@@ -1,5 +1,6 @@
 //! Shared, cheaply-cloneable handler state.
 
+use crate::approvals::{ApprovalMode, ApprovalStore};
 use crate::auth::TokenSet;
 use crate::limit::RateLimiter;
 use crate::metrics::Metrics;
@@ -8,6 +9,7 @@ use sherwood_core::RiskGate;
 use sherwood_execution::ToolAllowlist;
 use sherwood_store::SqliteStore;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 /// Trading mode. `Live` is reachable only when `allow_live` is set and an admin
@@ -54,6 +56,11 @@ pub struct ServerOpts {
     /// Directory of the built dashboard (`frontend/dist`) to serve at `/`.
     /// `None` = API only.
     pub static_dir: Option<std::path::PathBuf>,
+    /// `Auto` = the approval gate is transparent; `Manual` = every risk-passing
+    /// order waits for the operator.
+    pub approval_mode: ApprovalMode,
+    /// How long a pending approval waits before it auto-denies.
+    pub approval_timeout: Duration,
 }
 
 impl Default for ServerOpts {
@@ -63,6 +70,8 @@ impl Default for ServerOpts {
             rate_limit_per_min: 120,
             cors_origins: Vec::new(),
             static_dir: None,
+            approval_mode: ApprovalMode::Auto,
+            approval_timeout: Duration::from_secs(60),
         }
     }
 }
@@ -82,6 +91,8 @@ pub struct AppState {
     pub cors_origins: Arc<Vec<String>>,
     /// Built dashboard directory, if the server should serve it.
     pub static_dir: Option<Arc<std::path::PathBuf>>,
+    pub approvals: Arc<ApprovalStore>,
+    pub approval_mode: ApprovalMode,
     pub started_at: DateTime<Utc>,
 }
 
@@ -106,6 +117,8 @@ impl AppState {
             allow_live: opts.allow_live,
             cors_origins: Arc::new(opts.cors_origins),
             static_dir: opts.static_dir.map(Arc::new),
+            approvals: Arc::new(ApprovalStore::new(opts.approval_timeout)),
+            approval_mode: opts.approval_mode,
             started_at: Utc::now(),
         }
     }

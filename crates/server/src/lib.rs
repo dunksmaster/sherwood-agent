@@ -1,9 +1,11 @@
 //! `sherwood-server` — the local control-plane HTTP API.
 //!
 //! Loopback bind, bearer auth with three RBAC roles, one error envelope, a
-//! global rate limit, CORS for the dashboard origin, and Prometheus metrics.
-//! The WebSocket event feed and generated OpenAPI wait on S11 (they need the
-//! run loop folded into the server) and route stability.
+//! global rate limit, CORS for the dashboard origin, Prometheus metrics, an SSE
+//! event feed, the approval gate ([ADR-0005]), and (optionally) the built
+//! dashboard. Generated OpenAPI is the remaining S9e task.
+//!
+//! [ADR-0005]: ../../../docs/adr/0005-approval-gate.md
 //!
 //! | Method | Path | Min role | Notes |
 //! |---|---|---|---|
@@ -14,12 +16,15 @@
 //! | GET  | `/v1/activity` | viewer | recent audit events + fill count |
 //! | GET  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
 //! | GET  | `/v1/events` | viewer | SSE stream of new audit-chain rows |
+//! | GET  | `/v1/approvals` | viewer | approval queue + mode |
+//! | POST | `/v1/approvals/{id}` | operator | approve / deny a pending order |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod approvals;
 pub mod auth;
 pub mod error;
 pub mod limit;
@@ -95,6 +100,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/activity", get(routes::get_activity))
         .route("/v1/audit/verify", get(routes::get_audit_verify))
         .route("/v1/events", get(routes::get_events))
+        .route("/v1/approvals", get(routes::get_approvals))
+        .route("/v1/approvals/{id}", post(routes::post_approval))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
@@ -132,7 +139,19 @@ where
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     let bound = listener.local_addr()?;
-    tracing::info!(%bound, "sherwood-server listening");
+    tracing::info!(%bound, mode = ?state.approval_mode, "sherwood-server listening");
+
+    // Auto-deny approvals that outlive the timeout even if no hook is waiting on
+    // them (e.g. the agent gave up on its request). A daemon task; the runtime
+    // is torn down on shutdown.
+    let approvals = state.approvals.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(5));
+        loop {
+            tick.tick().await;
+            approvals.sweep_expired();
+        }
+    });
 
     axum::serve(listener, router(state))
         .with_graceful_shutdown(shutdown)
@@ -234,6 +253,13 @@ mod tests {
 
     fn get(path: &str) -> Request<Body> {
         Request::get(path).body(Body::empty()).unwrap()
+    }
+
+    fn get_as(path: &str, token: &str) -> Request<Body> {
+        Request::get(path)
+            .header("authorization", format!("Bearer {token}"))
+            .body(Body::empty())
+            .unwrap()
     }
 
     fn post(path: &str, token: Option<&str>, json: serde_json::Value) -> Request<Body> {
@@ -522,6 +548,166 @@ mod tests {
         let resp = call(state, get("/v1/health")).await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("\"status\":\"ok\""));
+    }
+
+    fn manual_state() -> AppState {
+        state_full(
+            ServerOpts {
+                approval_mode: crate::approvals::ApprovalMode::Manual,
+                approval_timeout: std::time::Duration::from_millis(300),
+                ..ServerOpts::default()
+            },
+            None,
+        )
+    }
+
+    fn order_hook_body() -> serde_json::Value {
+        serde_json::json!({
+            "tool_call": { "name": "place_order",
+                "arguments": { "symbol": "ROAR", "side": "buy", "quantity": "1", "limit_price": "100" } },
+            "context": ctx_json()
+        })
+    }
+
+    async fn pending_approval_id(state: &AppState) -> String {
+        for _ in 0..100 {
+            let resp = call(state.clone(), get_as("/v1/approvals", OPERATOR)).await;
+            let b = body_string(resp).await;
+            if b.contains("\"pending\":1") {
+                let v: serde_json::Value = serde_json::from_str(&b).unwrap();
+                return v["approvals"][0]["id"].as_str().unwrap().to_string();
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        panic!("no pending approval appeared");
+    }
+
+    #[tokio::test]
+    async fn manual_mode_holds_an_order_until_approved() {
+        let state = manual_state();
+        let hs = state.clone();
+        let hook = tokio::spawn(async move {
+            call(
+                hs,
+                post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+            )
+            .await
+        });
+
+        let id = pending_approval_id(&state).await;
+        let resp = call(
+            state.clone(),
+            post(
+                &format!("/v1/approvals/{id}"),
+                Some(OPERATOR),
+                serde_json::json!({ "decision": "approve" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let hr = hook.await.unwrap();
+        assert_eq!(hr.status(), StatusCode::OK);
+        assert_eq!(body_string(hr).await, r#"{"decision":"allow"}"#);
+    }
+
+    #[tokio::test]
+    async fn manual_mode_deny_turns_the_hook_into_a_deny() {
+        let state = manual_state();
+        let hs = state.clone();
+        let hook = tokio::spawn(async move {
+            call(
+                hs,
+                post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+            )
+            .await
+        });
+
+        let id = pending_approval_id(&state).await;
+        call(
+            state.clone(),
+            post(
+                &format!("/v1/approvals/{id}"),
+                Some(OPERATOR),
+                serde_json::json!({ "decision": "deny", "reason": "no" }),
+            ),
+        )
+        .await;
+
+        let hr = hook.await.unwrap();
+        assert!(body_string(hr).await.contains("operator denied"));
+    }
+
+    #[tokio::test]
+    async fn manual_mode_times_out_to_deny() {
+        let state = manual_state(); // 300ms timeout
+        let hr = call(
+            state,
+            post("/v1/hook/pretooluse", Some(OPERATOR), order_hook_body()),
+        )
+        .await;
+        assert_eq!(hr.status(), StatusCode::OK);
+        assert!(body_string(hr).await.contains("timed out"));
+    }
+
+    #[tokio::test]
+    async fn manual_mode_does_not_hold_reads_or_denied_orders() {
+        let state = manual_state();
+        // a read tool is allowed straight through
+        let resp = call(
+            state.clone(),
+            post(
+                "/v1/hook/pretooluse",
+                Some(OPERATOR),
+                serde_json::json!({
+                    "tool_call": { "name": "get_positions", "arguments": {} },
+                    "context": ctx_json()
+                }),
+            ),
+        )
+        .await;
+        assert_eq!(body_string(resp).await, r#"{"decision":"allow"}"#);
+        assert_eq!(state.approvals.pending_count(), 0);
+    }
+
+    #[tokio::test]
+    async fn approvals_decision_needs_operator_and_a_valid_verb() {
+        let state = manual_state();
+        // viewer cannot decide
+        let resp = call(
+            state.clone(),
+            post(
+                "/v1/approvals/whatever",
+                Some(VIEWER),
+                serde_json::json!({ "decision": "approve" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+
+        // bad verb
+        let resp = call(
+            state.clone(),
+            post(
+                "/v1/approvals/whatever",
+                Some(OPERATOR),
+                serde_json::json!({ "decision": "maybe" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+
+        // unknown id
+        let resp = call(
+            state,
+            post(
+                "/v1/approvals/nope",
+                Some(OPERATOR),
+                serde_json::json!({ "decision": "approve" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
