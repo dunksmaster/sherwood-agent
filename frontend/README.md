@@ -34,6 +34,7 @@ follow-up). See [`docs/FRONTEND-ARCH.md`](../docs/FRONTEND-ARCH.md).
 
 - PAPER / **LIVE** badge (live is red and pulses), kill-switch state, uptime
 - Portfolio: cash, realized P&L, open positions (from `GET /v1/portfolio`)
-- Activity: recent audit-chain events + fill count, with a chain-integrity badge
+- Activity: audit-chain events streamed live over SSE (`GET /v1/events`) + fill
+  count, with a chain-integrity badge
 - Admin controls: kill switch and PAPER/LIVE toggle, each re-prompting for the
   admin token

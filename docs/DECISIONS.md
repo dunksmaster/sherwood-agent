@@ -31,6 +31,22 @@ Planned, to be written when the step that needs them arrives:
 
 Decisions that shaped the project but do not each warrant a full ADR. Newest first.
 
+### 2026-09-04
+
+**`sherwood serve` is a pure control plane — it does not run the trading loop.** The paper
+loop stays in `sherwood run` (feed → decider → gate → paper executor → store); `serve`
+reads the state `run` persists and controls the risk gate / kill switch. Rationale: under
+[ADR-0001](adr/0001-mcp-interaction-model.md) Option 3 the live trading in v0.1 is done by an
+external agent through the `PreToolUse` hook, not our in-process loop; and a long-running
+`serve` that also ran the loop would need a non-terminating feed, which is a v0.2 live-feed
+concern. Folding the loop in-process remains possible later without an API change.
+
+**The event feed is Server-Sent Events, not a WebSocket.** `GET /v1/events` streams new
+audit-chain rows. SSE fits a one-directional read-only feed, rides the existing bearer-auth
+middleware with no upgrade handshake, and browsers reconnect it natively. The roadmap's
+"WebSocket" wording is superseded here. A WebSocket can still be added later if a
+bidirectional need appears.
+
 ### 2026-09-03
 
 **ADR-0001, 0002, 0003 accepted.** MCP model: agent harness with an in-line fail-closed risk

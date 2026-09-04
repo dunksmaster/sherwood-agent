@@ -13,6 +13,7 @@
 //! | GET  | `/v1/portfolio` | viewer | last persisted portfolio snapshot |
 //! | GET  | `/v1/activity` | viewer | recent audit events + fill count |
 //! | GET  | `/v1/audit/verify` | viewer | recompute the audit hash chain |
+//! | GET  | `/v1/events` | viewer | SSE stream of new audit-chain rows |
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -93,6 +94,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/portfolio", get(routes::get_portfolio))
         .route("/v1/activity", get(routes::get_activity))
         .route("/v1/audit/verify", get(routes::get_audit_verify))
+        .route("/v1/events", get(routes::get_events))
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
@@ -520,6 +522,26 @@ mod tests {
         let resp = call(state, get("/v1/health")).await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("\"status\":\"ok\""));
+    }
+
+    #[tokio::test]
+    async fn events_stream_requires_viewer_and_is_an_event_stream() {
+        // No token → 401.
+        let resp = call(test_state(), get("/v1/events")).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // Viewer token → 200 text/event-stream. Drop the response without
+        // reading the (infinite) body.
+        let state = state_full(ServerOpts::default(), Some(seeded_store().await));
+        let mut req = get("/v1/events");
+        req.headers_mut()
+            .insert("authorization", format!("Bearer {VIEWER}").parse().unwrap());
+        let resp = call(state, req).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "text/event-stream"
+        );
     }
 
     #[tokio::test]

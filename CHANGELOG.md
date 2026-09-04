@@ -9,6 +9,14 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Live event feed (S9d)** — `GET /v1/events` is a Server-Sent Events stream (viewer role,
+  same bearer auth as every route). Each frame carries a JSON array of audit-chain rows
+  appended since the last one; an empty array plus a keep-alive comment when nothing changed.
+  The dashboard consumes it with a `fetch`-based SSE reader (so the token stays in a header,
+  which `EventSource` can't do) and shows activity from the stream, dropping the `/v1/activity`
+  poll to a slow fill-count/fallback. SSE rather than a WebSocket — one-directional, native
+  browser reconnect, no upgrade handshake to secure. `sherwood serve` stays a control plane
+  and does not run the trading loop (see `docs/DECISIONS.md`).
 - **Server serves the dashboard (S10.1)** — `[server] static_dir` (e.g. `frontend/dist`)
   makes `sherwood-server` serve the built dashboard at `/` with SPA fallback to
   `index.html`, so the whole thing runs from one loopback origin. Static responses carry a

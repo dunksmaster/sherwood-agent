@@ -1,13 +1,15 @@
 import { useCallback, useState } from "react";
-import { api } from "./api.ts";
+import { api, type AuditEvent } from "./api.ts";
 import { useToken } from "./hooks/useToken.ts";
 import { usePoll } from "./hooks/usePoll.ts";
+import { useAuditStream } from "./hooks/useAuditStream.ts";
 import { StatusBar } from "./views/StatusBar.tsx";
 import { PortfolioCard } from "./views/PortfolioCard.tsx";
 import { ActivityList } from "./views/ActivityList.tsx";
 import { Controls } from "./views/Controls.tsx";
 
 const POLL_MS = 4000;
+const MAX_EVENTS = 200;
 
 function Login({ onSubmit }: { onSubmit: (t: string) => void }) {
   const [v, setV] = useState("");
@@ -43,8 +45,21 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
 
   const health = usePoll(() => api.health(token), POLL_MS, onUnauth);
   const portfolio = usePoll(() => api.portfolio(token), POLL_MS, onUnauth);
-  const activity = usePoll(() => api.activity(token, 25), POLL_MS, onUnauth);
+  // The audit rows come over SSE; this poll only needs the fill count now, so
+  // it can be slow. It also doubles as the fallback if the stream is down.
+  const activity = usePoll(() => api.activity(token, 25), POLL_MS * 3, onUnauth);
   const audit = usePoll(() => api.auditVerify(token), POLL_MS * 4, onUnauth);
+
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const onBatch = useCallback((rows: AuditEvent[]) => {
+    setEvents((prev) => {
+      const seen = new Set(prev.map((e) => e.seq));
+      const merged = [...prev, ...rows.filter((r) => !seen.has(r.seq))];
+      merged.sort((a, b) => a.seq - b.seq);
+      return merged.slice(-MAX_EVENTS);
+    });
+  }, []);
+  useAuditStream(token, onBatch, onUnauth);
 
   const refreshControls = useCallback(() => {
     health.refresh();
@@ -62,6 +77,7 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
       <div className="grid">
         <PortfolioCard data={portfolio.data} error={portfolio.error} />
         <ActivityList
+          events={events}
           data={activity.data}
           error={activity.error}
           audit={audit.data}
