@@ -143,6 +143,9 @@ cargo run -p sherwood-cli -- run config.toml
 # 5b. Backtest the same feed and print performance metrics (see docs/BACKTEST.md)
 cargo run -p sherwood-cli -- backtest config.toml
 
+# 5c. Back up the state DB + vault (stop `serve`/`run` first; see docs/RUNBOOK.md)
+cargo run -p sherwood-cli -- backup config.toml ./backups
+
 # 6. Or start the local control-plane API (loopback, bearer token minted into
 #    the vault on first run). Exposes /v1/health and the PreToolUse order gate.
 cargo run -p sherwood-cli -- serve config.toml

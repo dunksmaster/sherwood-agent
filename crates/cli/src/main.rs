@@ -8,6 +8,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 mod backtest;
+mod backup_cmd;
 mod config;
 mod feed;
 mod runner;
@@ -28,6 +29,8 @@ fn usage() -> ! {
          sherwood backtest <config.toml>  replay the feed and print performance metrics\n  \
          sherwood serve <config.toml>  start the local control-plane HTTP API\n  \
          sherwood check <config.toml>  validate a config file and exit\n  \
+         sherwood backup <config.toml> <dir>    copy the state DB + vault into <dir>\n  \
+         sherwood restore <config.toml> <backup-dir> [--force]   copy them back\n  \
          sherwood secrets <cmd>        manage the encrypted secret vault\n"
     );
     std::process::exit(2);
@@ -113,6 +116,19 @@ async fn main() -> Result<()> {
                 cfg.risk.allowlist.len()
             );
             Ok(())
+        }
+        Some("backup") => {
+            let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let dest: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let cfg = config::AppConfig::load(&path)?;
+            backup_cmd::backup(&cfg, &dest)
+        }
+        Some("restore") => {
+            let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let from: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let force = args.next().as_deref() == Some("--force");
+            let cfg = config::AppConfig::load(&path)?;
+            backup_cmd::restore(&cfg, &from, force)
         }
         _ => usage(),
     }
