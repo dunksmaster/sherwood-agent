@@ -163,6 +163,46 @@ where
         .await
 }
 
+/// Guards the S9e decision (no generated OpenAPI — `docs/API.md` is *the*
+/// contract) against drift: every `/v1/…` path registered in [`router`] must
+/// appear in the doc's route table, and vice versa.
+#[cfg(test)]
+mod api_doc_sync {
+    use std::collections::BTreeSet;
+
+    fn tokens(text: &str, split: char) -> BTreeSet<&str> {
+        text.split(split)
+            .map(|s| s.trim_end_matches(['.', ',', ')', '/']))
+            .filter(|s| s.len() > "/v1/".len() && s.starts_with("/v1/"))
+            .filter(|s| !s.contains('*') && !s.contains(char::is_whitespace))
+            .collect()
+    }
+
+    #[test]
+    fn api_md_matches_the_registered_routes() {
+        // Only the `.route("…")` registration lines, not test-module URLs.
+        let route_lines: String = include_str!("lib.rs")
+            .lines()
+            .filter(|l| l.contains(".route(\""))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let registered = tokens(&route_lines, '"');
+        let api_md =
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../docs/API.md"))
+                .expect("read docs/API.md");
+        let documented = tokens(&api_md, '`');
+
+        let undocumented: Vec<_> = registered.difference(&documented).collect();
+        let stale: Vec<_> = documented.difference(&registered).collect();
+        assert!(
+            undocumented.is_empty() && stale.is_empty(),
+            "docs/API.md is out of sync with router():\n  \
+             registered but undocumented: {undocumented:?}\n  \
+             documented but not registered: {stale:?}"
+        );
+    }
+}
+
 /// A short request-correlation id (16 hex chars). Best-effort — a CSPRNG hiccup
 /// degrades to a fixed placeholder rather than failing the response.
 pub(crate) fn new_correlation_id() -> String {
