@@ -39,14 +39,15 @@ v0.1 uses Robinhood OAuth. There are no private keys — Robinhood custodies the
 credential surface is therefore: the OAuth grant, the NVIDIA (or other provider) API key, and
 the local API token.
 
-| Rule | Detail |
-|---|---|
-| Storage | OS keyring, or an `age`-encrypted file. Never plaintext on disk. |
-| Configuration | `config.toml` holds *references* (`secret = "keyring:nvidia_api_key"`), never values. |
-| In memory | Minimum lifetime. Wrapped in a type that zeroes on drop and whose `Debug` prints `[redacted]`. |
-| Logs | A `tracing` layer scrubs known secret shapes. Secrets are never formatted into errors. |
-| API | Write-only. The dashboard can set a secret; no endpoint returns one. The UI shows `••••••` plus a "set / not set" state. |
-| Rotation | Any secret can be replaced without a restart, via config reload. |
+| Rule | Detail | State |
+|---|---|---|
+| Storage | `sherwood-secrets` `FileVault` — Argon2id-derived key, XChaCha20-Poly1305 over a JSON map. Passphrase from `$SHERWOOD_VAULT_PASSPHRASE`, never written. `0600` on Unix. An OS-keyring backend is a later option. | **done** |
+| Configuration | Config holds *references* — `api_key = "vault:nvidia"` — resolved by `resolve_ref` at load. Values never appear in a config file. | **done** (resolver); consumers land at S4 |
+| In memory | `SecretString` zeroes on drop; `Debug` prints `SecretString([redacted])`. | **done** |
+| CLI | `sherwood secrets set` reads the value from **stdin**, never argv (argv is visible in `ps`). `get` prints plaintext and says so. | **done** |
+| Logs | A `tracing` layer scrubs known secret shapes; secrets are never formatted into errors. | pending (S13) |
+| API | Write-only — the dashboard sets a secret, no endpoint returns one; UI shows `••••••`. | pending (S9) |
+| Rotation | `secrets set` overwrites in place; live reload is S2.2. | partial |
 | Revocation | Losing the OAuth grant is a `Fatal` error: halt, emit `SessionStateChanged`, require operator re-consent. Never silently retry a 401. |
 
 Under [ADR-0001](adr/0001-mcp-interaction-model.md) Option 3, the OAuth grant lives inside the

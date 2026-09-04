@@ -4,6 +4,7 @@ members = [
     "crates/core",
     "crates/store",
     "crates/events",
+    "crates/secrets",
     "crates/execution",
     "crates/copytrade",
     "crates/sniper",

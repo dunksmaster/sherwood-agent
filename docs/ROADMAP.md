@@ -129,14 +129,19 @@ run, persists the portfolio + fills + a verifying audit chain, and resumes from 
 snapshot on the next run. Still open within S4–S5: the AI decider (blocked on S6), a seeded
 RNG, and `proptest` on the gate arithmetic.
 
-## S6–S8 — Robinhood integration
+## S6 — secrets vault
+
+| Step | Task | Crate | Status |
+|---|---|---|---|
+| S6.1 | `SecretsVault` trait + `SecretString` (zeroes on drop); `resolve_ref` for `vault:NAME` config refs | `secrets` | done |
+| S6.2 | `FileVault` — Argon2id + XChaCha20-Poly1305 encrypted file; passphrase from env. `sherwood secrets` CLI | `secrets`, `cli` | done |
+| S6.3 | OS keyring backend | `secrets` | deferred — behind a feature, when there is demand; `FileVault` covers v0.1 |
+| S6.4 | Local API token generated on first run | `secrets` | deferred to S9 — needs the server |
+
+## S7–S8 — Robinhood integration
 
 | Step | Task | Crate |
 |---|---|---|
-| S6.1 | `SecretsVault` trait | `secrets` |
-| S6.2 | OS keyring implementation | `secrets` |
-| S6.3 | `age` file-based implementation | `secrets` |
-| S6.4 | Local API token generated on first run | `secrets` |
 | S7.1 | MCP client per [ADR-0001](adr/0001-mcp-interaction-model.md) | `execution` |
 | S7.2 | **Tool allowlist** — only named MCP tools may be invoked, everything else refused | `execution` |
 | S7.3 | `RobinhoodExecutor` — place, cancel, status | `execution` |

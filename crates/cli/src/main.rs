@@ -10,6 +10,7 @@
 mod config;
 mod feed;
 mod runner;
+mod secrets_cmd;
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -22,7 +23,8 @@ fn usage() -> ! {
          USAGE:\n  \
          sherwood demo                 run the built-in paper scenario\n  \
          sherwood run <config.toml>    run against a config file (paper only)\n  \
-         sherwood check <config.toml>  validate a config file and exit\n"
+         sherwood check <config.toml>  validate a config file and exit\n  \
+         sherwood secrets <cmd>        manage the encrypted secret vault\n"
     );
     std::process::exit(2);
 }
@@ -53,6 +55,7 @@ async fn main() -> Result<()> {
 
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
+        Some("secrets") => secrets_cmd::run(args),
         Some("demo") => runner::demo(&shutdown).await,
         Some("run") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();

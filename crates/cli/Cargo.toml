@@ -13,6 +13,7 @@ path = "src/main.rs"
 sherwood-core = { path = "../core" }
 sherwood-store = { path = "../store" }
 sherwood-events = { path = "../events" }
+sherwood-secrets = { path = "../secrets" }
 sherwood-execution = { path = "../execution" }
 sherwood-decision = { path = "../decision" }
 sherwood-copytrade = { path = "../copytrade" }
