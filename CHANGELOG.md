@@ -84,6 +84,29 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   key). Same boundary as `sherwood-signer`: no RPC client, no broadcast method; nothing yet
   calls `wallet_for_symbol` to actually pick a wallet for an order — that's `sherwood-dex`.
   14 unit tests.
+- **`sherwood-dex` — Uniswap v4 swap construction (v0.2.4).** New crate:
+  `ExactInputSingleSwap::execute_calldata` builds a single-hop exact-input `V4_SWAP` through
+  the `UniversalRouter` (`060c0f` — `SWAP_EXACT_IN_SINGLE`/`SETTLE_ALL`/`TAKE_ALL`, sourced
+  from `Uniswap/universal-router` and `Uniswap/v4-periphery`'s own `Commands.sol` /
+  `Actions.sol` / `IV4Router.sol`); `permit2.rs` builds the two prerequisite approvals
+  (bounded amounts, no "unlimited" approve); `quote.rs` computes `amount_out_minimum`
+  (slippage) and a deadline. New `sherwood dex-simulate <from> <token> <amount_raw> …` — an
+  `eth_call` dry run that signs and sends nothing.
+
+  **Verification, honestly reported:** the encoding was diffed byte-for-byte against a real,
+  currently-successful `execute` transaction pulled from the live chain — every field matched
+  exactly (including `minHopPriceX36`, a struct field added upstream in March 2026, at exactly
+  the byte position this crate puts it). That confirms the encoding logic is right. It does
+  **not** confirm a swap against a real pool succeeds: `sherwood dex-simulate` against the
+  live NVDA/USDG pool still reverts with empty revert data, from a wallet confirmed — at call
+  time — to hold ample balance and have both approvals maxed out; smaller amounts and looser
+  slippage didn't change the outcome, and re-simulating the real successful transaction (ruling
+  out `eth_call` plumbing as the cause) succeeds cleanly. Root cause is open — see
+  [`crates/dex/README.md`](crates/dex/README.md). **Do not sign or broadcast anything this
+  crate builds until `sherwood dex-simulate` for that exact pool returns success first.**
+  19 unit tests (structural correctness only — see above for what they do and don't prove).
+  Same boundary as every crate below it: no RPC client, no method that sends anything;
+  `eth_sendRawTransaction` does not appear anywhere in this codebase.
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**
