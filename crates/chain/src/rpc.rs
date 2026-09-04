@@ -94,15 +94,58 @@ pub trait EvmClient: Send + Sync {
         Ok(w)
     }
 
-    /// `eth_getLogs`.
+    /// `eth_getLogs`. A wide range that the node refuses (too many results, or
+    /// it timed out scanning) is bisected and retried — public RPCs commonly
+    /// cap `eth_getLogs`, and a token's own history can still span the whole
+    /// chain.
     async fn get_logs(&self, filter: &LogFilter) -> Result<Vec<RpcLog>> {
-        let ret = self
-            .request("eth_getLogs", json!([filter.to_params()]))
-            .await?;
-        let raw: Vec<RawLog> = serde_json::from_value(ret)
-            .map_err(|e| ChainError::Decode(format!("eth_getLogs result: {e}")))?;
-        raw.into_iter().map(RawLog::into_log).collect()
+        self.get_logs_bisecting(filter, 0).await
     }
+
+    #[doc(hidden)]
+    async fn get_logs_bisecting(&self, filter: &LogFilter, depth: u32) -> Result<Vec<RpcLog>> {
+        const MAX_SPLIT_DEPTH: u32 = 12; // up to 4096-way; plenty for any realistic range
+        match self
+            .request("eth_getLogs", json!([filter.to_params()]))
+            .await
+        {
+            Ok(ret) => {
+                let raw: Vec<RawLog> = serde_json::from_value(ret)
+                    .map_err(|e| ChainError::Decode(format!("eth_getLogs result: {e}")))?;
+                raw.into_iter().map(RawLog::into_log).collect()
+            }
+            Err(e)
+                if depth < MAX_SPLIT_DEPTH
+                    && filter.to_block > filter.from_block
+                    && is_range_too_wide(&e) =>
+            {
+                let mid = filter.from_block + (filter.to_block - filter.from_block) / 2;
+                let left = LogFilter {
+                    to_block: mid,
+                    ..filter.clone()
+                };
+                let right = LogFilter {
+                    from_block: mid + 1,
+                    ..filter.clone()
+                };
+                let mut merged = self.get_logs_bisecting(&left, depth + 1).await?;
+                merged.extend(self.get_logs_bisecting(&right, depth + 1).await?);
+                Ok(merged)
+            }
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// Whether an `eth_getLogs` error looks like "the range is too wide" (as
+/// opposed to a real failure) — worth bisecting and retrying rather than
+/// giving up.
+fn is_range_too_wide(e: &ChainError) -> bool {
+    let ChainError::Rpc { message, .. } = e else {
+        return false;
+    };
+    let m = message.to_lowercase();
+    m.contains("time") || m.contains("limit") || m.contains("exceed") || m.contains("too many")
 }
 
 /// Filter for [`EvmClient::get_logs`]. `topics` positions may be `None` (wildcard)
@@ -226,19 +269,32 @@ impl HttpClient {
     }
 }
 
+/// Public RPCs throttle bursts of reads (Robinhood Chain's does). Back off and
+/// retry a `429` this many times before giving up.
+const MAX_429_RETRIES: u32 = 5;
+
 #[async_trait]
 impl EvmClient for HttpClient {
     async fn request(&self, method: &str, params: Value) -> Result<Value> {
         let id = self.id.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
         let body = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
 
-        let resp = self
-            .http
-            .post(&self.url)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| ChainError::Transport(e.to_string()))?;
+        let mut attempt = 0;
+        let resp = loop {
+            let resp = self
+                .http
+                .post(&self.url)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| ChainError::Transport(e.to_string()))?;
+            if resp.status().as_u16() == 429 && attempt < MAX_429_RETRIES {
+                tokio::time::sleep(std::time::Duration::from_millis(400 * 2u64.pow(attempt))).await;
+                attempt += 1;
+                continue;
+            }
+            break resp;
+        };
         if !resp.status().is_success() {
             return Err(ChainError::Transport(format!("HTTP {}", resp.status())));
         }

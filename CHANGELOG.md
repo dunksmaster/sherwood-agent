@@ -21,6 +21,22 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   subcommand runs it (verified end-to-end against Robinhood Chain mainnet:
   `chainId 4663`, NVDA transfers permissionless). 21 unit tests over a mock
   transport. Deps added: `sha3`, `keccak` (both MIT/Apache, MSRV-safe).
+- **`sherwood-chain::univ4` — Uniswap v4 pool price reads (v0.2.1b).** `PoolKey`
+  + `PoolId` (`keccak256(abi.encode(...))`), a `StateView` client
+  (`getSlot0` / `getLiquidity`), pool discovery from `PoolManager`'s
+  `Initialize` logs, liquidity-ranked pool selection, and
+  `sqrtPriceX96` → `Decimal` price conversion — computed by shifting both
+  operands down 48 bits before squaring, since `sqrtPriceX96` itself can
+  exceed `Decimal`'s ~7.9e28 range even though the ratio it represents does
+  not. `EvmClient::get_logs` now bisects and retries a block range the node
+  refuses (too wide / timed out) instead of failing outright, and
+  `HttpClient` backs off and retries a `429`. New `sherwood chain-price [rpc]
+  [token] [denom]` subcommand. Verified against a real on-chain pool: an
+  NVDA/USDG pool's `sqrtPriceX96` decodes to ≈199 USDG/NVDA, a sane share
+  price — recorded as a known-answer test (`pool_id` and the price
+  conversion both check against the live values in
+  [ROBINHOOD-CHAIN.md](docs/ROBINHOOD-CHAIN.md)). Still no wallet, no
+  signing. 7 new unit tests (28 total in `sherwood-chain`).
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**

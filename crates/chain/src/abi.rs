@@ -50,6 +50,31 @@ pub fn uint_word(value: u128) -> Word {
     w
 }
 
+/// Sign-extend an `i128` (e.g. a Solidity `int24` such as a Uniswap v4
+/// `tickSpacing`) into a 32-byte two's-complement word.
+#[must_use]
+pub fn int_word(value: i128) -> Word {
+    let mut w = if value < 0 { [0xffu8; 32] } else { [0u8; 32] };
+    w[16..].copy_from_slice(&value.to_be_bytes());
+    w
+}
+
+/// Decode a signed return value (e.g. an `int24` tick) truncated to `i32`.
+/// Correct for any Solidity signed integer up to 32 bits: sign-extension to
+/// 256 bits preserves the value under truncation back to a wider-or-equal
+/// two's-complement width.
+pub fn decode_i32(ret: &[u8]) -> Result<i32> {
+    if ret.len() < 32 {
+        return Err(ChainError::Decode(format!(
+            "expected a 32-byte word, got {} bytes",
+            ret.len()
+        )));
+    }
+    let mut buf = [0u8; 4];
+    buf.copy_from_slice(&ret[28..32]);
+    Ok(i32::from_be_bytes(buf))
+}
+
 /// Build calldata: 4-byte selector followed by the words, concatenated.
 #[must_use]
 pub fn calldata(selector: [u8; 4], words: &[Word]) -> String {

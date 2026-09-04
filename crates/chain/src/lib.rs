@@ -7,7 +7,9 @@
 //! * read an ERC-20 ([`erc20::Erc20`]) — metadata and balances, and
 //! * check that a token's transfers are permissionless
 //!   ([`probe::check_transfer_open`]) — the mandatory pre-flight before live
-//!   mode may arm.
+//!   mode may arm, and
+//! * read a Uniswap v4 pool's price ([`univ4::read_price`]) — pool discovery,
+//!   liquidity ranking, and `sqrtPriceX96` → `Decimal`.
 //!
 //! It **never** builds, signs, or broadcasts a transaction. There is no method
 //! that takes a private key or returns a signed payload. Transaction
@@ -25,6 +27,7 @@ pub mod erc20;
 pub mod keccak;
 pub mod probe;
 pub mod rpc;
+pub mod univ4;
 
 #[cfg(test)]
 mod testutil;
