@@ -51,6 +51,9 @@ pub struct ServerOpts {
     pub rate_limit_per_min: u32,
     /// Allowed CORS origins for the dashboard. Empty = no CORS headers.
     pub cors_origins: Vec<String>,
+    /// Directory of the built dashboard (`frontend/dist`) to serve at `/`.
+    /// `None` = API only.
+    pub static_dir: Option<std::path::PathBuf>,
 }
 
 impl Default for ServerOpts {
@@ -59,6 +62,7 @@ impl Default for ServerOpts {
             allow_live: false,
             rate_limit_per_min: 120,
             cors_origins: Vec::new(),
+            static_dir: None,
         }
     }
 }
@@ -76,6 +80,8 @@ pub struct AppState {
     pub store: Option<Arc<SqliteStore>>,
     pub allow_live: bool,
     pub cors_origins: Arc<Vec<String>>,
+    /// Built dashboard directory, if the server should serve it.
+    pub static_dir: Option<Arc<std::path::PathBuf>>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -99,6 +105,7 @@ impl AppState {
             store,
             allow_live: opts.allow_live,
             cors_origins: Arc::new(opts.cors_origins),
+            static_dir: opts.static_dir.map(Arc::new),
             started_at: Utc::now(),
         }
     }

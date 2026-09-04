@@ -69,6 +69,12 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
     if cfg.server.allow_live {
         tracing::warn!("[server] allow_live = true — an admin can switch this server to LIVE mode");
     }
+    match &cfg.server.static_dir {
+        Some(dir) => tracing::info!(dir = %dir.display(), "serving the dashboard at /"),
+        None => tracing::info!(
+            "no [server] static_dir — API only (run the dashboard with `npm run dev`)"
+        ),
+    }
 
     let store = match &cfg.general.state_path {
         Some(path) => {

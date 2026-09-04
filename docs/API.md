@@ -31,7 +31,9 @@ Roles are assigned by which configured token authenticates: `token_ref` → admi
 
 A global fixed-window rate limit (`[server] rate_limit_per_min`, default 120) returns `429`
 with the standard envelope when exceeded. CORS headers are emitted only for origins listed in
-`[server] cors_origins`. `utoipa`-generated OpenAPI replaces this file at S9d.
+`[server] cors_origins`. With `[server] static_dir` set, the built dashboard is served at `/`
+(SPA fallback to `index.html`) with a strict CSP and hardening headers; `/v1/*` keeps
+precedence. `utoipa`-generated OpenAPI replaces this file at S9d.
 
 ## Contract (from [ENGINEERING-STANDARDS.md](ENGINEERING-STANDARDS.md#api))
 

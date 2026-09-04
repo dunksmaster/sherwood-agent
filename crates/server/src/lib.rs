@@ -32,15 +32,42 @@ pub use state::{AppState, Mode, ServerOpts};
 
 use axum::http::{
     header::{AUTHORIZATION, CONTENT_TYPE},
-    HeaderValue, Method,
+    HeaderName, HeaderValue, Method,
 };
 use axum::middleware::from_fn_with_state;
 use axum::routing::{get, post};
 use axum::Router;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::Path;
 use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 use tower_http::trace::TraceLayer;
+
+/// The Content-Security-Policy served with the dashboard. Kept identical to the
+/// one `frontend/vite.config.ts` injects at build time.
+pub const DASHBOARD_CSP: &str = "default-src 'self'; connect-src 'self'; img-src 'self' data:; \
+     style-src 'self' 'unsafe-inline'; script-src 'self'; base-uri 'none'; \
+     form-action 'none'; frame-ancestors 'none'";
+
+/// Serve the built dashboard at `/` with SPA fallback to `index.html`, plus the
+/// CSP and a few hardening headers. Only the static responses carry these.
+fn static_router(dir: &Path) -> Router<AppState> {
+    let serve = ServeDir::new(dir).fallback(ServeFile::new(dir.join("index.html")));
+    let hdr = |name: &'static str, val: &'static str| {
+        SetResponseHeaderLayer::overriding(
+            HeaderName::from_static(name),
+            HeaderValue::from_static(val),
+        )
+    };
+    Router::new()
+        .fallback_service(serve)
+        .layer(hdr("content-security-policy", DASHBOARD_CSP))
+        .layer(hdr("x-content-type-options", "nosniff"))
+        .layer(hdr("referrer-policy", "no-referrer"))
+        .layer(hdr("x-frame-options", "DENY"))
+}
 
 fn build_cors(origins: &[String]) -> CorsLayer {
     if origins.is_empty() {
@@ -71,11 +98,17 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/kill", post(routes::post_kill))
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
-    Router::new()
+    let mut app = Router::new()
         .route("/v1/health", get(routes::health))
         .route("/v1/metrics", get(routes::metrics))
-        .merge(protected)
-        .layer(from_fn_with_state(state.clone(), mw::record_metrics))
+        .merge(protected);
+
+    if let Some(dir) = &state.static_dir {
+        // `/v1/*` above wins; anything else falls through to the dashboard.
+        app = app.merge(static_router(dir));
+    }
+
+    app.layer(from_fn_with_state(state.clone(), mw::record_metrics))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .layer(from_fn_with_state(state.clone(), mw::rate_limit))
@@ -443,6 +476,56 @@ mod tests {
         let state = state_full(ServerOpts::default(), Some(seeded_store().await));
         let resp = call(state, get("/v1/portfolio")).await; // no token
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn serves_the_dashboard_with_spa_fallback_and_hardening_headers() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("index.html"),
+            "<!doctype html><title>sherwood</title>",
+        )
+        .unwrap();
+        let state = state_full(
+            ServerOpts {
+                static_dir: Some(dir.path().to_path_buf()),
+                ..ServerOpts::default()
+            },
+            None,
+        );
+
+        // "/" serves index.html with the CSP + hardening headers.
+        let resp = call(state.clone(), get("/")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let csp = resp
+            .headers()
+            .get("content-security-policy")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(csp.contains("default-src 'self'") && csp.contains("script-src 'self'"));
+        assert_eq!(resp.headers().get("x-frame-options").unwrap(), "DENY");
+        assert_eq!(
+            resp.headers().get("x-content-type-options").unwrap(),
+            "nosniff"
+        );
+        assert!(body_string(resp).await.contains("<title>sherwood</title>"));
+
+        // An unknown non-API path falls back to index.html (SPA routing).
+        let resp = call(state.clone(), get("/portfolio")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("sherwood"));
+
+        // The API still takes precedence over the static fallback.
+        let resp = call(state, get("/v1/health")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert!(body_string(resp).await.contains("\"status\":\"ok\""));
+    }
+
+    #[tokio::test]
+    async fn no_static_dir_means_unknown_paths_404() {
+        let resp = call(test_state(), get("/not-a-route")).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
