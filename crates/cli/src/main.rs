@@ -105,7 +105,7 @@ async fn main() -> Result<()> {
         Some("serve") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
             let cfg = config::AppConfig::load(&path)?;
-            serve_cmd::run(cfg, Arc::clone(&shutdown)).await
+            serve_cmd::run(cfg, path, Arc::clone(&shutdown)).await
         }
         Some("check") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();

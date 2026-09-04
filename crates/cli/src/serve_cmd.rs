@@ -10,9 +10,11 @@ use anyhow::{anyhow, Context, Result};
 use sherwood_core::RiskGate;
 use sherwood_secrets::SecretsVault;
 use sherwood_server::auth::{ApiToken, TokenOrigin, TokenSet};
+use sherwood_server::state::{Reloaded, Reloader};
 use sherwood_server::AppState;
 use sherwood_store::SqliteStore;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -35,7 +37,7 @@ fn resolve_token(vault: &dyn SecretsVault, reference: &str, role: &str) -> Resul
     Ok(token)
 }
 
-pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
+pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -> Result<()> {
     let addr: SocketAddr = cfg
         .server
         .bind
@@ -107,13 +109,28 @@ pub async fn run(cfg: AppConfig, shutdown: Arc<AtomicBool>) -> Result<()> {
         }
     };
 
+    // `POST /v1/config/reload` re-reads and re-validates this file, then swaps
+    // in the new [risk] config, [hook] allowlist, and approval mode.
+    let reloader: Reloader = {
+        let path = cfg_path.clone();
+        Arc::new(move || {
+            let fresh = AppConfig::load(&path).map_err(|e| format!("{e:#}"))?;
+            Ok(Reloaded {
+                risk: RiskGate::new(fresh.risk.to_core()),
+                allowlist: fresh.hook.to_allowlist(),
+                approval_mode: fresh.server.to_opts().approval_mode,
+            })
+        })
+    };
+
     let state = AppState::new(
         tokens,
         RiskGate::new(cfg.risk.to_core()),
         allowlist,
         cfg.server.to_opts(),
         store,
-    );
+    )
+    .with_reloader(reloader);
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {

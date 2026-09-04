@@ -13,6 +13,7 @@
 //! | `POST` | `/v1/approvals/{id}` | operator | approve / deny a pending order |
 //! | `GET`  | `/v1/session` | viewer | per-session budget usage |
 //! | `POST` | `/v1/session/reset` | admin + re-auth | zero the session budget |
+//! | `POST` | `/v1/config/reload` | admin + re-auth | re-read `config.toml` (risk / allowlist / approval mode) |
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
@@ -166,26 +167,31 @@ pub async fn pretooluse(
     let req: HookRequest = serde_json::from_value(body.0)
         .map_err(|e| ApiError::bad_request(format!("invalid hook request: {e}")))?;
 
-    let control = state.control.read().await;
-    let ctx = GateContext {
-        portfolio: &req.context.portfolio,
-        ref_price: req.context.ref_price,
-        equity: req.context.equity,
-        unrealized_pnl: req.context.unrealized_pnl,
-        last_order_at: req.context.last_order_at,
-        // The API boundary may read the wall clock; the gate still receives it
-        // explicitly and never reads it itself.
-        now: Utc::now(),
+    // One read lock: evaluate the gate, classify the tool, and note the
+    // approval mode — then release it before any `.await` on an approval.
+    let (outcome, class, approval_mode) = {
+        let control = state.control.read().await;
+        let ctx = GateContext {
+            portfolio: &req.context.portfolio,
+            ref_price: req.context.ref_price,
+            equity: req.context.equity,
+            unrealized_pnl: req.context.unrealized_pnl,
+            last_order_at: req.context.last_order_at,
+            // The API boundary may read the wall clock; the gate still receives
+            // it explicitly and never reads it itself.
+            now: Utc::now(),
+        };
+        let outcome =
+            HookGate::new(&control.allowlist, &control.risk).evaluate(&req.tool_call, &ctx);
+        let class = control.allowlist.classify(&req.tool_call.name);
+        (outcome, class, control.approval_mode)
     };
-
-    let outcome = HookGate::new(&state.allowlist, &control.risk).evaluate(&req.tool_call, &ctx);
-    drop(control); // release the risk-config read lock before any await
 
     // Reads, cancels, and anything the gate already denied pass straight
     // through — the approval gate and the budget only apply to allowed
     // place-orders.
-    let is_place_order_allow = matches!(outcome, HookOutcome::Allow)
-        && state.allowlist.classify(&req.tool_call.name) == Some(ToolClass::PlaceOrder);
+    let is_place_order_allow =
+        matches!(outcome, HookOutcome::Allow) && class == Some(ToolClass::PlaceOrder);
     if !is_place_order_allow {
         match &outcome {
             HookOutcome::Allow => tracing::info!(tool = %req.tool_call.name, "hook: allow"),
@@ -204,7 +210,7 @@ pub async fn pretooluse(
     };
 
     // `manual` mode: hold the order for the operator.
-    if state.approval_mode == ApprovalMode::Manual {
+    if approval_mode == ApprovalMode::Manual {
         let ticket = state.approvals.enqueue(&req.tool_call.name, &order);
         tracing::info!(id = %ticket.id, tool = %req.tool_call.name, "hook: order held for approval");
         match ticket.wait().await {
@@ -443,10 +449,68 @@ pub async fn get_approvals(
     caller: Caller,
 ) -> ApiResult<Json<ApprovalsView>> {
     caller.require(Role::Viewer)?;
+    let mode = state.control.read().await.approval_mode;
     Ok(Json(ApprovalsView {
-        mode: state.approval_mode,
+        mode,
         pending: state.approvals.pending_count(),
         approvals: state.approvals.list(),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct ReloadRequest {
+    pub reauth: String,
+}
+
+#[derive(Serialize)]
+pub struct ReloadView {
+    reloaded: bool,
+    approval_mode: ApprovalMode,
+    allowlisted_tools: usize,
+    kill_switch: bool,
+    /// Config keys a reload cannot change without a restart.
+    note: &'static str,
+}
+
+/// `POST /v1/config/reload` — re-read `config.toml` and swap in the new
+/// `[risk]` config, `[hook]` allowlist, and `approval_mode` under one lock.
+/// The runtime kill switch is preserved: a reload can *engage* it (if the file
+/// says so) but never dis-engage one an admin set. Everything else — `bind`,
+/// tokens, CORS, `static_dir`, the session-budget caps — needs a restart.
+pub async fn post_config_reload(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<ReloadRequest>,
+) -> ApiResult<Json<ReloadView>> {
+    caller.require(Role::Admin)?;
+    check_reauth(&state, &req.reauth)?;
+
+    let reloader = state
+        .reloader
+        .as_ref()
+        .ok_or_else(|| ApiError::unprocessable("config reload is not available for this server"))?;
+    let fresh = reloader().map_err(ApiError::unprocessable)?;
+
+    let mut control = state.control.write().await;
+    let keep_kill = control.kill_switch();
+    control.risk = fresh.risk;
+    if keep_kill {
+        control.risk.config_mut().kill_switch = true;
+    }
+    control.allowlist = fresh.allowlist;
+    control.approval_mode = fresh.approval_mode;
+
+    tracing::warn!(
+        approval_mode = ?control.approval_mode,
+        kill_switch = control.kill_switch(),
+        "config reloaded by admin"
+    );
+    Ok(Json(ReloadView {
+        reloaded: true,
+        approval_mode: control.approval_mode,
+        allowlisted_tools: control.allowlist.len(),
+        kill_switch: control.kill_switch(),
+        note: "bind, tokens, CORS, static_dir and the session-budget caps still require a restart",
     }))
 }
 

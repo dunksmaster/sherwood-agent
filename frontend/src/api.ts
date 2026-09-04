@@ -157,6 +157,17 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ reauth }),
     }),
+  reloadConfig: (t: string, reauth: string) =>
+    req<{
+      reloaded: boolean;
+      approval_mode: ApprovalMode;
+      allowlisted_tools: number;
+      kill_switch: boolean;
+      note: string;
+    }>("/v1/config/reload", t, {
+      method: "POST",
+      body: JSON.stringify({ reauth }),
+    }),
   decideApproval: (
     t: string,
     id: string,

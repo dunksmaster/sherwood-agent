@@ -26,6 +26,7 @@ Keep it in sync with `crates/server/src/routes.rs` when routes change.
 | `POST` | `/v1/approvals/{id}` | operator | `{ decision: "approve"\|"deny", reason? }`. `404` if the id is unknown or already decided. |
 | `GET` | `/v1/session` | viewer | per-session budget: `{ orders_used, orders_cap, notional_used, notional_cap, elapsed_secs, duration_cap_secs, breached }`. |
 | `POST` | `/v1/session/reset` | admin | `{ reauth: "<admin token>" }` — zero the session budget counters and clear a breach. |
+| `POST` | `/v1/config/reload` | admin | `{ reauth: "<admin token>" }` — re-read and re-validate `config.toml`, then swap in the new `[risk]` config, `[hook]` allowlist, and `approval_mode`. A reload can *engage* the kill switch but never dis-engage one an admin set. `bind`, tokens, CORS, `static_dir`, and the session-budget caps still need a restart. |
 | `POST` | `/v1/hook/pretooluse` | operator | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
 | `POST` | `/v1/mode` | admin | `{ mode: "paper"\|"live", reauth: "<admin token>" }`. `live` is `403` unless `[server] allow_live = true`. |
 | `POST` | `/v1/kill` | admin | `{ engage: bool, reauth: "<admin token>" }`. Engaging makes the hook deny every order immediately. |

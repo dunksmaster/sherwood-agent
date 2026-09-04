@@ -9,6 +9,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 ## [Unreleased]
 
 ### Added
+- **Runtime config reload (S2.2)** — `POST /v1/config/reload` (admin + body re-auth)
+  re-reads and re-validates `config.toml`, then swaps in the new `[risk]` config, `[hook]`
+  tool allowlist, and `approval_mode` under one lock — no restart, no dropped connections or
+  in-flight approvals. A broken edit returns the validation error and changes nothing. The
+  runtime kill switch is **preserved**: a reload can engage it (if the file says so) but
+  never dis-engage one an admin set. `bind`, tokens, CORS, `static_dir`, and the
+  session-budget caps still require a restart. The dashboard's Controls card gets a *Reload
+  config* button. Internally: `Control` now holds the allowlist and approval mode (both were
+  previously immutable in `AppState`), so the reload is a single consistent write.
 - **`PreToolUse` hook script (S7.2b)** — [`scripts/pretooluse-hook.mjs`](scripts/README.md),
   the bridge for [ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3. A headless
   `claude` / `codex` agent runs it before every tool call; it reads the tool-call event on
