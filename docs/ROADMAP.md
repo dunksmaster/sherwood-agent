@@ -170,9 +170,11 @@ land with S9 (`sherwood-server`).
 
 ## S9–S13 — ops shell
 
-| Step | Task | Crate |
-|---|---|---|
-| S9 | `sherwood-server`: axum REST `/v1/` with `utoipa`, WebSocket feed, local-token auth (constant-time compare), RBAC middleware, PAPER/LIVE toggle, `/metrics`, localhost-only CORS, rate limiting | `server` |
+| Step | Task | Crate | Status |
+|---|---|---|---|
+| S9a | `sherwood-server` skeleton: axum on loopback (non-loopback bind refused), one `{code,message,correlation_id}` error envelope, bearer-token auth (constant-time, token generated into the vault on first run), `GET /v1/health`, `POST /v1/hook/pretooluse` wired to S7's `HookGate`. `sherwood serve <config>` with `[server]` + `[hook]` config | `server`, `cli` | done |
+| S9b | RBAC roles (`viewer` / `operator` / `admin`), PAPER/LIVE toggle (admin + re-auth), kill-switch endpoint | `server` | pending |
+| S9c | WebSocket event feed (bridges `sherwood-events`), `/metrics`, `utoipa`-generated OpenAPI, per-IP / per-token rate limiting, localhost CORS | `server` | pending |
 | S10 | Dashboard: React + Vite + shadcn/ui — auth, config, portfolio, activity feed, PAPER/LIVE badge, kill-switch button | `frontend/` |
 | S11 | Approval gate: state machine (proposed → pending → approved → executed → settled, or denied), WebSocket push, order cards with the AI's reasoning, manual and auto modes, auto-deny timeout, revocation before execution | `runtime` |
 | S12 | Scheduler and monitors: `tokio-cron-scheduler`, timezone handling, price-threshold monitors, per-run budgets (max orders, max notional, max duration) with hard stops | `runtime` |

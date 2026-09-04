@@ -11,6 +11,7 @@ mod config;
 mod feed;
 mod runner;
 mod secrets_cmd;
+mod serve_cmd;
 
 use anyhow::Result;
 use std::path::PathBuf;
@@ -23,6 +24,7 @@ fn usage() -> ! {
          USAGE:\n  \
          sherwood demo                 run the built-in paper scenario\n  \
          sherwood run <config.toml>    run against a config file (paper only)\n  \
+         sherwood serve <config.toml>  start the local control-plane HTTP API\n  \
          sherwood check <config.toml>  validate a config file and exit\n  \
          sherwood secrets <cmd>        manage the encrypted secret vault\n"
     );
@@ -61,6 +63,11 @@ async fn main() -> Result<()> {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
             let cfg = config::AppConfig::load(&path)?;
             runner::run(cfg, &shutdown).await
+        }
+        Some("serve") => {
+            let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();
+            let cfg = config::AppConfig::load(&path)?;
+            serve_cmd::run(cfg, Arc::clone(&shutdown)).await
         }
         Some("check") => {
             let path: PathBuf = args.next().unwrap_or_else(|| usage()).into();

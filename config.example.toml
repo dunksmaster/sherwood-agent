@@ -53,3 +53,18 @@ slippage              = 0.01
 enabled               = false
 min_initial_liquidity = 5000
 entry_notional        = 50
+
+[server]
+# `sherwood serve` — the local control-plane HTTP API. Loopback only; a public
+# bind needs TLS and is refused.
+bind      = "127.0.0.1:8787"
+token_ref = "vault:api_token"   # generated into the vault on first `serve` if absent;
+                                # read it with `sherwood secrets get api_token`
+
+[hook]
+# The PreToolUse order gate (ADR-0001 Option 3). Only tools listed here may be
+# called by the trading agent; each is classified. Empty = deny everything.
+# Fill in the exact names from `claude mcp` once the Robinhood MCP is connected.
+read_tools   = []   # e.g. ["get_account", "get_positions", "get_quotes"]
+place_tools  = []   # e.g. ["place_order"]  — parsed and risk-checked before allow
+cancel_tools = []   # e.g. ["cancel_order"] — allowed without a risk check

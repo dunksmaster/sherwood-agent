@@ -84,8 +84,9 @@ sherwood-agent/
 │   ├── store/        SQLite persistence + hash-chained audit log (sqlx)
 │   ├── events/       internal event bus (broadcast) + Subscriber trait
 │   ├── secrets/      encrypted file vault (Argon2id + XChaCha20-Poly1305)
-│   ├── execution/    Executor trait, PaperExecutor, LiveExecutor stub
+│   ├── execution/    Executor trait, PaperExecutor, LiveExecutor stub, PreToolUse hook gate
 │   ├── decision/     Decider trait, RuleDecider, AiDecider
+│   ├── server/       local control-plane HTTP API (axum, loopback, bearer auth)
 │   ├── copytrade/    library scaffold — deferred to v0.2
 │   ├── sniper/       library scaffold — deferred to v0.2
 │   └── cli/          the `sherwood` binary
@@ -96,7 +97,7 @@ sherwood-agent/
 └── rust-toolchain.toml
 ```
 
-Planned crates (not yet written): `config`, `supervisor`, `runtime`, `server`, plus a
+Planned crates (not yet written): `config`, `supervisor`, `runtime`, plus a
 `frontend/`. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## Prerequisites
@@ -136,6 +137,10 @@ cargo run -p sherwood-cli -- check config.toml
 #    `[general] decider = "ai"` (+ the `[ai]` section) to drive it with a
 #    language model instead of the rules — still paper, still gated.
 cargo run -p sherwood-cli -- run config.toml
+
+# 6. Or start the local control-plane API (loopback, bearer token minted into
+#    the vault on first run). Exposes /v1/health and the PreToolUse order gate.
+cargo run -p sherwood-cli -- serve config.toml
 ```
 
 `demo` replays a synthetic two-symbol series — a wiring demonstration, not a backtest. A
@@ -144,7 +149,7 @@ real backtest harness and a live feed are still ahead; see
 
 ## Project status
 
-**Early build.** 82 tests pass and CI is green. The plan, the standards, the threat model,
+**Early build.** 120 tests pass and CI is green. The plan, the standards, the threat model,
 and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance deliverable.
 
 - **Done (S0–S6):** the S0 doc set; a tested `core` with `RiskGate` and `Portfolio`; a
@@ -152,10 +157,13 @@ and the provenance trail live in [`docs/`](docs/README.md) — the S0 governance
   output, injection guard, fallback-to-Hold); SQLite persistence with a hash-chained audit
   log; an internal event bus; a multi-asset paper loop over a CSV feed; an encrypted secrets
   vault.
-- **Next:** the Robinhood MCP adapter (S7–S8), downstream of
-  [ADR-0001](docs/adr/0001-mcp-interaction-model.md).
-- **Not started:** the local server, the dashboard, the approval gate, a backtest harness.
-  See the roadmap.
+- **Done (S7 core, S9a):** the fail-closed `PreToolUse` hook decision core
+  ([ADR-0001](docs/adr/0001-mcp-interaction-model.md) Option 3) — tool allowlist, strict
+  order parsing, every path denies unless clean; and the `sherwood-server` skeleton
+  (`sherwood serve`) exposing `/v1/health` and the hook route on loopback with bearer auth.
+- **Next:** RBAC + the PAPER/LIVE toggle + kill-switch endpoint (S9b), then the WebSocket
+  feed and metrics (S9c), then the dashboard (S10).
+- **Not started:** the dashboard, the approval gate, the scheduler, a backtest harness.
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Known defects in the current
 code: [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).

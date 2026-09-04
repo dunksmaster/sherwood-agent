@@ -44,6 +44,10 @@ pub struct AppConfig {
     pub copytrade: CopySection,
     #[serde(default)]
     pub sniper: SniperSection,
+    #[serde(default)]
+    pub server: ServerSection,
+    #[serde(default)]
+    pub hook: HookSection,
 }
 
 #[derive(Debug, Deserialize)]
@@ -259,6 +263,70 @@ pub struct SniperSection {
     pub entry_notional: Option<Decimal>,
 }
 
+/// `sherwood serve` — the local control-plane HTTP API.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ServerSection {
+    /// `ip:port` to bind. Loopback only — a public bind needs TLS and is
+    /// refused (see `docs/SECURITY.md`).
+    pub bind: String,
+    /// Where the bearer token lives. A `vault:` reference; the token is
+    /// generated into the vault on first `serve` if absent.
+    pub token_ref: String,
+}
+
+impl Default for ServerSection {
+    fn default() -> Self {
+        Self {
+            bind: "127.0.0.1:8787".into(),
+            token_ref: "vault:api_token".into(),
+        }
+    }
+}
+
+impl ServerSection {
+    fn validate(&self) -> Result<()> {
+        let addr: std::net::SocketAddr = self
+            .bind
+            .parse()
+            .with_context(|| format!("server.bind {:?} is not a valid ip:port", self.bind))?;
+        if !addr.ip().is_loopback() {
+            bail!("server.bind {addr} is not loopback; a public bind needs TLS and is refused");
+        }
+        if !self.token_ref.starts_with("vault:") {
+            bail!("server.token_ref must be a vault reference like \"vault:api_token\"");
+        }
+        Ok(())
+    }
+}
+
+/// Which agent MCP tools the `PreToolUse` hook permits, and how each is
+/// classified. Empty lists mean "deny everything" — the safe default.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct HookSection {
+    pub read_tools: Vec<String>,
+    pub place_tools: Vec<String>,
+    pub cancel_tools: Vec<String>,
+}
+
+impl HookSection {
+    pub fn to_allowlist(&self) -> sherwood_execution::ToolAllowlist {
+        use sherwood_execution::ToolClass;
+        let mut a = sherwood_execution::ToolAllowlist::new();
+        for t in &self.read_tools {
+            a.allow(t, ToolClass::ReadOnly);
+        }
+        for t in &self.place_tools {
+            a.allow(t, ToolClass::PlaceOrder);
+        }
+        for t in &self.cancel_tools {
+            a.allow(t, ToolClass::CancelOrder);
+        }
+        a
+    }
+}
+
 impl AppConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
@@ -293,6 +361,7 @@ impl AppConfig {
         }
 
         self.risk.validate()?;
+        self.server.validate()?;
 
         if !self.copytrade.leaders.is_empty() {
             if let Some(f) = self.copytrade.fixed_fraction {
@@ -345,6 +414,8 @@ mod tests {
             ai: AiSection::default(),
             copytrade: CopySection::default(),
             sniper: SniperSection::default(),
+            server: ServerSection::default(),
+            hook: HookSection::default(),
         }
     }
 
@@ -389,6 +460,35 @@ mod tests {
         let mut c = base();
         c.general.mode = "live".into();
         assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn rejects_a_non_loopback_server_bind() {
+        let mut c = base();
+        c.server.bind = "0.0.0.0:8787".into();
+        let err = c.validate().unwrap_err().to_string();
+        assert!(err.contains("loopback"), "{err}");
+    }
+
+    #[test]
+    fn rejects_a_garbage_server_bind() {
+        let mut c = base();
+        c.server.bind = "not-an-addr".into();
+        assert!(c.validate().is_err());
+    }
+
+    #[test]
+    fn hook_section_maps_to_a_classified_allowlist() {
+        use sherwood_execution::ToolClass;
+        let mut c = base();
+        c.hook.read_tools = vec!["get_positions".into()];
+        c.hook.place_tools = vec!["place_order".into()];
+        c.hook.cancel_tools = vec!["cancel_order".into()];
+        let al = c.hook.to_allowlist();
+        assert_eq!(al.classify("get_positions"), Some(ToolClass::ReadOnly));
+        assert_eq!(al.classify("place_order"), Some(ToolClass::PlaceOrder));
+        assert_eq!(al.classify("cancel_order"), Some(ToolClass::CancelOrder));
+        assert_eq!(al.classify("something_else"), None);
     }
 
     #[test]
