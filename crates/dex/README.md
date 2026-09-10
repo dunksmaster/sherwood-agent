@@ -33,43 +33,37 @@ byte. `minHopPriceX36` is set to `0`, which the router treats as "disabled"
 
 ## Verification status — read this before trusting it with real value
 
-Two different checks were run, with two different results:
+- **Structural correctness: confirmed, and one bug found and fixed.** A real,
+  currently-successful (`status: 0x1`) `UniversalRouter.execute` transaction was pulled
+  from the live chain and diffed word-by-word against this crate's output for an
+  equivalent swap. Every framing word matched (selector, the three offset words, the
+  `060c0f` action sequence, the `ExactInputSingleParams` layout, the `SETTLE_ALL` /
+  `TAKE_ALL` param shape) **except one**: the `hookData` offset inside
+  `ExactInputSingleParams`. This crate emitted `9*32` (`0x120`); the real transaction
+  had `10*32` (`0x140`). Ten head words precede `hookData` — the five `PoolKey` words,
+  `zeroForOne`, `amountIn`, `amountOutMinimum`, `minHopPriceX36`, and the offset word
+  itself. At `0x120` the offset points at itself, and `v4-periphery`'s `CalldataDecoder`
+  slices `hookData` out of bounds and does a bare `revert(0, 0)` inside
+  `PoolManager.unlock` → `UniversalRouter.unlockCallback` — the empty-data (`0x`) revert
+  that made *every* simulated swap fail. Fixed in `v4swap.rs` (now `10*32`), with a unit
+  regression test pinning the word to `0x140`.
+- **End-to-end simulation of a Stock Token pool: now succeeds.** After the fix,
+  `sherwood dex-simulate` for a 5 USDG → NVDA single-hop swap returns success via
+  `eth_call`, from a wallet confirmed at call time to hold USDG and to have both
+  prerequisite approvals set. The pool it runs against is the one `find_best_pool`
+  selects: NVDA/USDG, dynamic fee (`0x800000`), tickSpacing 10, hook
+  `0x66622f77…` — the hook was never the problem; passing it empty `hookData` is fine.
+- **Local trace, no paid RPC.** The public endpoint has no `debug_traceCall`, so the bug
+  was localized with a Foundry fork replay — `debug/foundry/`, one dependency-free test
+  file. It forks Robinhood Chain, pranks the same wallet the live sim uses, and replays
+  the exact `execute` calldata: the pre-fix bytes revert with empty data inside
+  `unlockCallback` (before the pool is touched), the post-fix bytes simulate clean.
+  `forge test --fork-url https://rpc.mainnet.chain.robinhood.com -vv`.
 
-- **Structural correctness: confirmed.** A real, currently-successful (`status: 0x1`)
-  `UniversalRouter.execute` transaction was pulled from the live chain and diffed
-  byte-for-byte against this crate's own output for an equivalent swap shape. Every
-  field — the selector, the three offset words, the `060c0f` action sequence, the
-  `ExactInputSingleParams` layout (including `minHopPriceX36` at exactly byte 288, and
-  `hookData`'s offset at exactly `9*32`), and the `SETTLE_ALL`/`TAKE_ALL` param shape —
-  matched exactly. This is strong evidence the encoding logic in `v4swap.rs` is right.
-- **End-to-end simulation of a Stock Token pool: not yet successful — narrowed, not
-  solved.** `sherwood dex-simulate` against the live NVDA/USDG pool reverts with empty
-  revert data (`0x`), from a wallet confirmed — freshly, at call time — to hold ample
-  USDG and to have both prerequisite approvals already maxed out. What's been ruled out,
-  each checked directly against the live chain:
-  - **Not the RPC plumbing.** Re-simulating an *actual* successful transaction from its
-    real sender succeeds cleanly via the same `eth_call` path.
-  - **Not "wrong pool by liquidity ranking."** `NVDA/USDG` has 220+ Initialize'd pools
-    (most look like spam/dynamic-fee decoys). The one `find_best_pool` selects (fee
-    3000, tickSpacing 60) has ~78× the raw `getLiquidity()` of the pool at the fee tier
-    (375, tickSpacing 4) that a *different* Stock Token/USDG pair's real successful swap
-    actually used. Tried both — **both revert identically.**
-  - **Not Permit2 or the SETTLE step.** `Permit2.transferFrom(wallet → router, 5 USDG)`,
-    called directly (bypassing the router/pool entirely) with `from` set to the router
-    (the approved spender), **succeeds** — the wallet's real USDG moves.
-  - **Not the TAKE step either.** `NVDA.transfer(recipient, 1)` called with `from` set to
-    the `PoolManager` itself **succeeds** — consistent with ADR-0006's finding that NVDA
-    transfers are permissionless.
-
-  That leaves the `SWAP_EXACT_IN_SINGLE` action's actual pool-swap execution (inside
-  `V4Router`/`PoolManager.unlock`) as the remaining suspect, isolated by elimination
-  rather than confirmed directly — a debug-trace-capable RPC (`debug_traceCall`, not
-  available on the public endpoint used here) would settle it outright.
-
-**Practical conclusion: do not sign or broadcast a swap built by this crate against a
-real pool until `sherwood dex-simulate` for that exact pool returns success.** That
-command is exactly the gate to use — it caught this open question, which is what it is
-for. Before signing anything for real:
+**Practical conclusion: `sherwood dex-simulate` for the exact pool you intend to trade
+is the gate — it caught this bug, which is what it is for. Do not sign or broadcast a
+swap built by this crate until that simulation returns success for that pool, from your
+actual funded, Permit2-approved wallet.** Before signing anything for real:
 
 1. Build the swap.
 2. `sherwood dex-simulate <from> <token> <amount_raw> [denom] [bps]` —

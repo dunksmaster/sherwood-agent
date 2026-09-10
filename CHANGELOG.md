@@ -93,31 +93,32 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   (slippage) and a deadline. New `sherwood dex-simulate <from> <token> <amount_raw> …` — an
   `eth_call` dry run that signs and sends nothing.
 
-  **Verification, honestly reported:** the encoding was diffed byte-for-byte against a real,
-  currently-successful `execute` transaction pulled from the live chain — every field matched
-  exactly (including `minHopPriceX36`, a struct field added upstream in March 2026, at exactly
-  the byte position this crate puts it). That confirms the encoding logic is right. It does
-  **not** confirm a swap against a real pool succeeds: `sherwood dex-simulate` against the
-  live NVDA/USDG pool still reverts with empty revert data, from a wallet confirmed — at call
-  time — to hold ample balance and have both approvals maxed out; smaller amounts and looser
-  slippage didn't change the outcome, and re-simulating the real successful transaction (ruling
-  out `eth_call` plumbing as the cause) succeeds cleanly.
+  **Verification:** the encoding was diffed word-by-word against a real, currently-successful
+  `execute` transaction pulled from the live chain. That diff caught one bug — the
+  `ExactInputSingleParams` `hookData` offset (see **Fixed** below) — which is now fixed. After
+  the fix, `sherwood dex-simulate` for a 5 USDG → NVDA single-hop swap returns success via
+  `eth_call`, from a wallet confirmed at call time to hold USDG and have both prerequisite
+  approvals set, against the live NVDA/USDG pool `find_best_pool` selects. See
+  [`crates/dex/README.md`](crates/dex/README.md). **`sherwood dex-simulate` for the exact pool
+  you intend to trade is the gate — do not sign or broadcast anything this crate builds until
+  it returns success for that pool, from your actual funded, Permit2-approved wallet.**
+  20 unit tests. Same boundary as every crate below it: no RPC client, no method that sends
+  anything; `eth_sendRawTransaction` does not appear anywhere in this codebase.
 
-  **Follow-up narrowing (still root-cause-open):** tried a second NVDA/USDG pool at the fee
-  tier (375/tickSpacing 4) a *different* Stock Token pair's real successful swap actually used
-  — reverts identically to the first (fee 3000/tickSpacing 60, ~78× the raw liquidity), ruling
-  out "picked the wrong pool by liquidity ranking." Directly verified, bypassing the
-  router/pool entirely: `Permit2.transferFrom` moves this wallet's real USDG when called as the
-  router (the SETTLE mechanism works), and `NVDA.transfer` succeeds when called as the
-  `PoolManager` (the TAKE mechanism works). That leaves the `SWAP_EXACT_IN_SINGLE` action's own
-  execution as the remaining suspect, by elimination rather than confirmed — a
-  `debug_traceCall`-capable RPC (not available on the public endpoint used here) would settle
-  it outright. See [`crates/dex/README.md`](crates/dex/README.md). **Do not sign or broadcast
-  anything this crate builds until `sherwood dex-simulate` for that exact pool returns success
-  first.**
-  19 unit tests (structural correctness only — see above for what they do and don't prove).
-  Same boundary as every crate below it: no RPC client, no method that sends anything;
-  `eth_sendRawTransaction` does not appear anywhere in this codebase.
+### Fixed
+- **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**
+  `ExactInputSingleParams` encoded its `hookData` offset as `9*32` (`0x120`) instead of
+  `10*32` (`0x140`). Ten head words precede `hookData` — the five `PoolKey` words,
+  `zeroForOne`, `amountIn`, `amountOutMinimum`, `minHopPriceX36`, and the offset word itself
+  — so at `0x120` the offset points at itself and `v4-periphery`'s `CalldataDecoder` slices
+  `hookData` out of bounds, doing a bare `revert(0, 0)` inside `PoolManager.unlock` →
+  `UniversalRouter.unlockCallback`. That was the empty-data (`0x`) revert that made every
+  simulated swap in v0.2.4 fail — before the pool was ever touched, which is why isolating
+  SETTLE and TAKE didn't surface it. Found by diffing our calldata word-by-word against a
+  real successful `execute` tx (`0xe9655a40…`, `hookData` offset `0x140`), then confirmed
+  with a Foundry fork replay: pre-fix bytes revert empty, post-fix bytes simulate clean.
+  Regression test pins the offset word to `0x140`. New non-CI [`debug/foundry/`](debug/foundry/README.md)
+  harness holds the fork test (one dependency-free file; needs `forge` + a Robinhood Chain RPC).
 
 ### Changed
 - **v0.2 re-targeted to Robinhood Chain ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)).**
