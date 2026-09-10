@@ -1924,6 +1924,7 @@ dependencies = [
  "sherwood-dex",
  "sherwood-events",
  "sherwood-execution",
+ "sherwood-router",
  "sherwood-secrets",
  "sherwood-server",
  "sherwood-signer",
@@ -2023,6 +2024,15 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sherwood-router"
+version = "0.1.0"
+dependencies = [
+ "rust_decimal",
+ "rust_decimal_macros",
+ "thiserror",
 ]
 
 [[package]]

@@ -1,0 +1,21 @@
+[package]
+name = "sherwood-router"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Venue selection for Robinhood Chain (ADR-0006, v0.2.5): given an order's
+# notional, decide whether it routes to the AMM (Uniswap v4, via sherwood-dex)
+# or to an RFQ venue. Pure decision logic — no RPC client, no order
+# construction, no broadcast. Same boundary as every crate below it.
+
+[dependencies]
+thiserror.workspace = true
+rust_decimal.workspace = true
+
+[dev-dependencies]
+rust_decimal_macros.workspace = true
+
+[lints]
+workspace = true
