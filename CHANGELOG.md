@@ -104,6 +104,18 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   it returns success for that pool, from your actual funded, Permit2-approved wallet.**
   20 unit tests. Same boundary as every crate below it: no RPC client, no method that sends
   anything; `eth_sendRawTransaction` does not appear anywhere in this codebase.
+- **`sherwood-router` — venue selection (v0.2.5).** New crate: `Router::choose(notional)`
+  returns a `RouteChoice { venue, reason }` — `Venue::Amm` (Uniswap v4, via `sherwood-dex`)
+  or `Venue::Rfq` — with a reason string that names the numbers it compared, for the audit
+  log. Below the configured `rfq_min_notional` an order routes to the AMM; at or above it,
+  to RFQ **only if** an RFQ venue is configured (`rfq_available`). No RFQ endpoint or
+  contract is verified on Robinhood Chain and nothing in this codebase talks to one, so
+  `rfq_available` is `false` in every real config and **every order routes to the AMM
+  today** — the threshold path exists so that integrating an RFQ client later is a config
+  change, not a control-flow change. `Router::new` rejects a non-positive threshold and
+  rejects `rfq_available` with no threshold. New `sherwood route <notional>
+  [rfq_min_notional] [rfq_available]` CLI. 8 unit tests. Same boundary as every crate below
+  it: no RPC client, no calldata, no signing, no sending.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**
