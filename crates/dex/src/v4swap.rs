@@ -70,9 +70,19 @@ impl ExactInputSingleSwap {
         body.extend_from_slice(&word_bool(self.zero_for_one));
         body.extend_from_slice(&word_uint(self.amount_in));
         body.extend_from_slice(&word_uint(self.amount_out_minimum));
+        // Last three words: minHopPriceX36 (0 = disabled), the hookData
+        // offset, and hookData's length (0 — empty `bytes`). The offset is
+        // relative to the struct's own start and must clear all ten head
+        // words: currency0, currency1, fee, tickSpacing, hooks, zeroForOne,
+        // amountIn, amountOutMinimum, minHopPriceX36, and the offset word
+        // itself — so the length word sits at 10*32 = 0x140. A real
+        // successful `execute` tx pulled from the live chain encodes exactly
+        // that; `9*32` (the pre-`minHopPriceX36` layout) points one word
+        // short, at the offset word itself, and `CalldataDecoder` then
+        // slices hookData out of bounds and reverts with empty data.
         body.extend_from_slice(&word_uint(0)); // minHopPriceX36 = 0 (disabled)
-        body.extend_from_slice(&word_uint(9 * 32)); // hookData offset, relative to struct start
-        body.extend_from_slice(&word_uint(0)); // hookData length = 0 (no hook data)
+        body.extend_from_slice(&word_uint(10 * 32)); // hookData offset (0x140)
+        body.extend_from_slice(&word_uint(0)); // hookData length = 0
         Ok(body) // 10 head words + 1 tail word = 352 bytes = 0x160
     }
 
@@ -167,6 +177,24 @@ mod tests {
         let s = swap();
         let body = s.exact_input_single_params_body().unwrap();
         assert_eq!(body.len(), 0x160);
+    }
+
+    #[test]
+    fn hookdata_offset_word_is_0x140_not_0x120() {
+        // Regression: the offset must clear all 10 head words (including
+        // `minHopPriceX36` and the offset word itself). A real successful
+        // on-chain `execute` tx encodes `0x140` here; `0x120` points the
+        // offset one word short and makes `CalldataDecoder` revert (empty
+        // revert data) inside `unlockCallback`, before the swap even runs.
+        let s = swap();
+        let body = s.exact_input_single_params_body().unwrap();
+        // head words: 5 (PoolKey) + zeroForOne + amountIn + amountOutMinimum
+        // + minHopPriceX36 + hookDataOffset = 10; offset word is the 10th.
+        let offset_word = &body[9 * 32..10 * 32];
+        assert_eq!(abi::decode_u128(offset_word).unwrap(), 0x140);
+        // and the word it points at (the length) is zero, in bounds.
+        let len_word = &body[0x140..0x140 + 32];
+        assert_eq!(abi::decode_u128(len_word).unwrap(), 0);
     }
 
     #[test]

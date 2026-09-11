@@ -1,0 +1,11 @@
+# Standalone fork-test harness for diagnosing the sherwood-dex V4_SWAP revert.
+# Not part of the Rust workspace or CI. See debug/foundry/README.md.
+[profile.default]
+src = "src"
+test = "test"
+out = "out"
+libs = []
+# Robinhood Chain (chain id 4663). No debug_traceCall on the public RPC,
+# which is the whole reason this fork test exists.
+[rpc_endpoints]
+rhc = "https://rpc.mainnet.chain.robinhood.com"
