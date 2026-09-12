@@ -51,7 +51,15 @@ export function Controls({
 
   return (
     <div className="card">
-      <h2>Controls — admin</h2>
+      <h2>
+        <svg viewBox="0 0 16 16" className="h2-icon" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 1a1 1 0 0 1 1 1v.1a5.5 5.5 0 0 1 1.66.69l.07-.07a1 1 0 1 1 1.41 1.41l-.07.07c.31.5.55 1.06.69 1.66H13a1 1 0 1 1 0 2h-.1a5.5 5.5 0 0 1-.69 1.66l.07.07a1 1 0 1 1-1.41 1.41l-.07-.07a5.5 5.5 0 0 1-1.66.69V13a1 1 0 1 1-2 0v-.1a5.5 5.5 0 0 1-1.66-.69l-.07.07a1 1 0 1 1-1.41-1.41l.07-.07A5.5 5.5 0 0 1 3.1 9H3a1 1 0 1 1 0-2h.1c.14-.6.38-1.16.69-1.66l-.07-.07a1 1 0 0 1 1.41-1.41l.07.07A5.5 5.5 0 0 1 7 3.1V3a1 1 0 0 1 1-1Zm0 4.5A2.5 2.5 0 1 0 8 11a2.5 2.5 0 0 0 0-5Z"
+          />
+        </svg>
+        Controls — admin
+      </h2>
       <label className="muted" htmlFor="reauth">
         Admin token (required to confirm)
       </label>
