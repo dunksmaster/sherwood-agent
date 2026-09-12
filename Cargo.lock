@@ -1912,6 +1912,7 @@ name = "sherwood-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "idna_adapter",
  "rust_decimal",
@@ -2053,6 +2054,7 @@ dependencies = [
 name = "sherwood-server"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "chrono",
  "getrandom 0.2.17",

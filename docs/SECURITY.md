@@ -106,7 +106,9 @@ requires the admin role and is audited. Recovery procedure lives in
   minimum. Wired even though v0.1 usually runs admin-only, so adding tokens later is not a
   redesign. *Done (S9b).*
 - The live toggle and the kill switch require the admin role **and** the admin token again in
-  the request body. LIVE is additionally gated by `[server] allow_live`. *Done (S9b).*
+  the request body. LIVE is additionally gated by `[server] allow_live` **and** the
+  [ADR-0006](adr/0006-robinhood-chain-venue.md) pre-flight (`LivePreflight`, v0.2.6) — arming
+  fails closed if no pre-flight is wired up or it doesn't pass. *Done (S9b; pre-flight gate v0.2.6).*
 - CORS headers are emitted only for origins in `[server] cors_origins` (empty = same-origin
   only). Strict CSP on the frontend, no external script/style origins: *pending (S10).*
 - Global fixed-window rate limit (`[server] rate_limit_per_min`), `429` through the error

@@ -270,10 +270,30 @@ pub async fn post_mode(
     caller.require(Role::Admin)?;
     check_reauth(&state, &req.reauth)?;
 
-    if req.mode == Mode::Live && !state.allow_live {
-        return Err(ApiError::forbidden(
-            "live mode is disabled in config (`[server] allow_live = false`)",
-        ));
+    if req.mode == Mode::Live {
+        if !state.allow_live {
+            return Err(ApiError::forbidden(
+                "live mode is disabled in config (`[server] allow_live = false`)",
+            ));
+        }
+        // ADR-0006: arming must fail closed, not just gate order placement —
+        // an operator who armed live mode should not learn the pre-flight
+        // would have refused only at the next tick.
+        match &state.live_preflight {
+            None => {
+                return Err(ApiError::forbidden(
+                    "live mode has no pre-flight configured (ADR-0006) — refusing to arm",
+                ));
+            }
+            Some(preflight) => {
+                if let Err(reason) = preflight.check().await {
+                    tracing::warn!(%reason, "live pre-flight failed — refusing to arm");
+                    return Err(ApiError::forbidden(format!(
+                        "live pre-flight failed: {reason}"
+                    )));
+                }
+            }
+        }
     }
 
     let mut control = state.control.write().await;

@@ -116,6 +116,19 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   rejects `rfq_available` with no threshold. New `sherwood route <notional>
   [rfq_min_notional] [rfq_available]` CLI. 8 unit tests. Same boundary as every crate below
   it: no RPC client, no calldata, no signing, no sending.
+- **Live-mode pre-flight gate (v0.2.6).** `sherwood-server` gains a `LivePreflight` trait;
+  `POST /v1/mode` calls it on every attempt to arm `Live`, before the mode flag flips, and
+  fails closed — `[server] allow_live = true` with no pre-flight configured now still
+  refuses (previously `allow_live` alone was enough). `sherwood serve` wires a
+  `ChainLivePreflight` that re-runs [ADR-0006](docs/adr/0006-robinhood-chain-venue.md)'s
+  fresh-address `transfer` check (`sherwood_chain::probe::check_transfer_open`, the same one
+  `sherwood chain-probe` runs by hand) against every `[chain] symbols` entry plus `denom`.
+  Any token that isn't `Verdict::Permissionless`, an RPC failure, or no `[chain]` symbols
+  configured all refuse arming, with the reason in the `403` body — this is the "guards
+  against an implementation upgrade adding an allowlist" check running at arm-time, not
+  just as a manual CLI command. 4 new server unit tests (fail-closed with no pre-flight,
+  pass, fail with a reason surfaced) plus 3 in the new `sherwood-cli::live_preflight`
+  module. Live mode still has no order-placing path in this codebase.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

@@ -62,6 +62,24 @@ pub struct Reloaded {
 /// Re-reads and re-validates the config file, or returns why it could not.
 pub type Reloader = Arc<dyn Fn() -> Result<Reloaded, String> + Send + Sync>;
 
+/// The [ADR-0006](../../../docs/adr/0006-robinhood-chain-venue.md) mandatory
+/// pre-flight for arming live mode: is a fresh, un-onboarded address still
+/// able to receive every live-tradeable token permissionlessly — the same
+/// check `sherwood chain-probe` runs by hand. `Ok(())` means it is safe to
+/// arm; `Err(reason)` refuses, and the reason is returned to the caller and
+/// logged.
+///
+/// Live mode has no order-placing path in this codebase yet, but arming is
+/// gated regardless: the flag itself must not flip on a chain whose transfer
+/// semantics have changed since ADR-0006 was decided (e.g. an implementation
+/// upgrade adding an allowlist) — checking only when an order is placed would
+/// be too late for an operator who armed live mode and only found out at the
+/// next tick.
+#[async_trait::async_trait]
+pub trait LivePreflight: Send + Sync {
+    async fn check(&self) -> Result<(), String>;
+}
+
 /// Knobs that come from `[server]` config.
 #[derive(Debug, Clone)]
 pub struct ServerOpts {
@@ -116,6 +134,10 @@ pub struct AppState {
     /// Re-reads `config.toml` for `POST /v1/config/reload`. `None` = reload is
     /// unavailable (e.g. tests).
     pub reloader: Option<Reloader>,
+    /// The ADR-0006 pre-flight `POST /v1/mode` must pass before arming
+    /// `Live`. `None` means no pre-flight is wired up — live mode then stays
+    /// unreachable (fail closed) regardless of `allow_live`.
+    pub live_preflight: Option<Arc<dyn LivePreflight>>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -144,6 +166,7 @@ impl AppState {
             approvals: Arc::new(ApprovalStore::new(opts.approval_timeout)),
             budget: Arc::new(SessionBudget::new(opts.budget_caps)),
             reloader: None,
+            live_preflight: None,
             started_at: Utc::now(),
         }
     }
@@ -151,6 +174,12 @@ impl AppState {
     #[must_use]
     pub fn with_reloader(mut self, reloader: Reloader) -> Self {
         self.reloader = Some(reloader);
+        self
+    }
+
+    #[must_use]
+    pub fn with_live_preflight(mut self, preflight: Arc<dyn LivePreflight>) -> Self {
+        self.live_preflight = Some(preflight);
         self
     }
 

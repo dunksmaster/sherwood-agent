@@ -14,6 +14,7 @@ mod chain_price_cmd;
 mod config;
 mod dex_simulate_cmd;
 mod feed;
+mod live_preflight;
 mod route_cmd;
 mod runner;
 mod secrets_cmd;
