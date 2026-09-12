@@ -1918,6 +1918,7 @@ dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
  "serde",
+ "serde_json",
  "sherwood-chain",
  "sherwood-copytrade",
  "sherwood-core",
@@ -1925,6 +1926,7 @@ dependencies = [
  "sherwood-dex",
  "sherwood-events",
  "sherwood-execution",
+ "sherwood-reconcile",
  "sherwood-router",
  "sherwood-secrets",
  "sherwood-server",
@@ -2025,6 +2027,21 @@ dependencies = [
  "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "sherwood-reconcile"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde_json",
+ "sherwood-chain",
+ "sherwood-core",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

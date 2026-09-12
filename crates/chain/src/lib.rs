@@ -9,12 +9,19 @@
 //!   ([`probe::check_transfer_open`]) — the mandatory pre-flight before live
 //!   mode may arm, and
 //! * read a Uniswap v4 pool's price ([`univ4::read_price`]) — pool discovery,
-//!   liquidity ranking, and `sqrtPriceX96` → `Decimal`.
+//!   liquidity ranking, and `sqrtPriceX96` → `Decimal`, and
+//! * read a transaction's receipt ([`EvmClient::get_transaction_receipt`]) —
+//!   status, block, gas used, for a hash the operator already has.
 //!
 //! It **never** builds, signs, or broadcasts a transaction. There is no method
-//! that takes a private key or returns a signed payload. Transaction
-//! construction and signing are `sherwood-signer` / `sherwood-dex` (v0.2.2+),
-//! behind their own gates.
+//! that takes a private key or returns a signed payload, and — per
+//! [ADR-0007](../../../docs/adr/0007-no-broadcast-capability.md) —
+//! `eth_sendRawTransaction` will not be added here or anywhere else in this
+//! codebase; broadcasting stays the operator's own tooling, permanently.
+//! Transaction construction and signing are `sherwood-signer` /
+//! `sherwood-dex` (v0.2.2+); reconciling a transaction the operator already
+//! sent is `sherwood-reconcile` (v0.2.8) — both read-only or sign-only, same
+//! as this crate.
 //!
 //! The transport is behind the [`EvmClient`] trait so tests drive the ABI and
 //! decode paths against canned JSON-RPC responses; [`HttpClient`] is the real
@@ -34,7 +41,7 @@ pub mod univ4;
 #[cfg(test)]
 mod testutil;
 
-pub use rpc::{EvmClient, HttpClient, LogFilter, RpcLog};
+pub use rpc::{EvmClient, HttpClient, LogFilter, RpcLog, TxReceipt};
 
 /// Anything that can go wrong reading the chain.
 #[derive(Debug, thiserror::Error)]

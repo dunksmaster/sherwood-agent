@@ -1,0 +1,27 @@
+[package]
+name = "sherwood-reconcile"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# Reconciling a transaction the operator already broadcast, against the
+# trade they expected (ADR-0007, v0.2.8). Reads a receipt for a tx_hash the
+# operator supplies; never sends anything, never signs, has no key.
+
+[dependencies]
+sherwood-chain = { path = "../chain" }
+sherwood-core = { path = "../core" }
+thiserror.workspace = true
+rust_decimal.workspace = true
+chrono.workspace = true
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+rust_decimal_macros.workspace = true
+async-trait.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

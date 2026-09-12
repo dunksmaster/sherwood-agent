@@ -15,6 +15,7 @@ mod config;
 mod dex_simulate_cmd;
 mod feed;
 mod live_preflight;
+mod reconcile_cmd;
 mod route_cmd;
 mod runner;
 mod secrets_cmd;
@@ -44,7 +45,8 @@ fn usage() -> ! {
          sherwood wallet-address <secret-name>  derive + print a wallet address from a vault key\n  \
          sherwood wallets <config.toml>  load [[wallets]] and print name/address/budget per wallet\n  \
          sherwood dex-simulate <from> <token> <amount_raw> [denom] [bps] [rpc]  eth_call-simulate a swap (signs/sends nothing)\n  \
-         sherwood route <notional> [rfq_min_notional] [rfq_available]  print which venue (AMM/RFQ) an order routes to\n"
+         sherwood route <notional> [rfq_min_notional] [rfq_available]  print which venue (AMM/RFQ) an order routes to\n  \
+         sherwood reconcile <config.toml> <tx_hash> <symbol> <buy|sell> <qty> <price> [fee]  read a receipt for a tx you already sent, record it (signs/sends nothing)\n"
     );
     std::process::exit(2);
 }
@@ -108,6 +110,7 @@ async fn main() -> Result<()> {
         Some("chain-price") => chain_price_cmd::run(args).await,
         Some("dex-simulate") => dex_simulate_cmd::run(args).await,
         Some("route") => route_cmd::run(args),
+        Some("reconcile") => reconcile_cmd::run(args).await,
         Some("wallet-address") => wallet_cmd::run(args),
         Some("demo") => runner::demo(&shutdown).await,
         Some("run") => {
