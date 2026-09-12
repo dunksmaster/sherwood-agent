@@ -92,9 +92,18 @@ export function ApprovalsCard({
   return (
     <div className="card">
       <h2>
+        <svg viewBox="0 0 16 16" className="h2-icon" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M13.78 4.22a.75.75 0 0 1 0 1.06l-6.5 6.5a.75.75 0 0 1-1.06 0l-3-3a.75.75 0 1 1 1.06-1.06L6.75 10.19l5.97-5.97a.75.75 0 0 1 1.06 0Z"
+          />
+        </svg>
         Approvals
         {data && (
-          <span className="badge" style={{ marginLeft: 8 }}>
+          <span
+            className={`badge${data.pending > 0 ? " pending" : ""}`}
+            style={{ marginLeft: 8 }}
+          >
             {data.mode}
             {data.pending > 0 ? ` · ${data.pending} pending` : ""}
           </span>

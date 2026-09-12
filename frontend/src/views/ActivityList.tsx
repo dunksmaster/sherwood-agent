@@ -5,6 +5,16 @@ import type {
   AuditVerifyView,
 } from "../api.ts";
 
+/** Which of the fixed accent classes a `kind` gets — purely a visual grouping
+ * so the eye can scan the feed without reading every row, not a source of
+ * truth for anything. */
+function kindClass(kind: string): string {
+  if (kind === "fill") return "ev-dot-ok";
+  if (kind === "risk_rejected") return "ev-dot-danger";
+  if (kind === "run_end") return "ev-dot-muted";
+  return "ev-dot-accent";
+}
+
 export function ActivityList({
   events,
   data,
@@ -21,6 +31,12 @@ export function ActivityList({
   return (
     <div className="card">
       <h2>
+        <svg viewBox="0 0 16 16" className="h2-icon" aria-hidden="true">
+          <path
+            fill="currentColor"
+            d="M8 1a7 7 0 1 0 7 7 .75.75 0 0 0-1.5 0A5.5 5.5 0 1 1 8 2.5a.75.75 0 0 0 0-1.5Zm0 3a.75.75 0 0 1 .75.75v3.19l2.03 2.03a.75.75 0 1 1-1.06 1.06l-2.25-2.25A.75.75 0 0 1 7.25 8V4.75A.75.75 0 0 1 8 4Z"
+          />
+        </svg>
         Activity
         {audit &&
           (audit.ok ? (
@@ -45,7 +61,10 @@ export function ActivityList({
             {rows.length === 0 && <p className="muted">Nothing yet.</p>}
             {[...rows].reverse().map((ev) => (
               <div className="ev" key={ev.seq}>
-                <span className="mono">{ev.kind}</span>
+                <span className="row" style={{ gap: 8 }}>
+                  <span className={`ev-dot ${kindClass(ev.kind)}`} aria-hidden="true" />
+                  <span className="mono">{ev.kind}</span>
+                </span>
                 <span className="muted mono">
                   {new Date(ev.at).toLocaleTimeString()}
                 </span>
