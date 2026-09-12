@@ -10,11 +10,24 @@ function uptime(secs: number): string {
 export function StatusBar({ health }: { health: Health | null }) {
   const mode = health?.mode ?? "paper";
   return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <h1>sherwood control plane</h1>
+    <div className="topbar" data-mode={mode}>
+      <div className="brand">
+        <span className="brand-mark" aria-hidden="true" />
+        <h1>
+          sherwood <span className="dim">control plane</span>
+        </h1>
+      </div>
       <div className="row">
-        <span className={`badge ${mode}`}>{mode.toUpperCase()}</span>
-        {health?.kill_switch && <span className="badge kill">KILL SWITCH ENGAGED</span>}
+        <span className={`badge ${mode}`}>
+          <span className="dot" aria-hidden="true" />
+          {mode.toUpperCase()}
+        </span>
+        {health?.kill_switch && (
+          <span className="badge kill">
+            <span className="dot" aria-hidden="true" />
+            KILL SWITCH ENGAGED
+          </span>
+        )}
         {health && (
           <span className="muted mono" title="server uptime">
             up {uptime(health.uptime_secs)}
