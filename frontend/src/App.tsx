@@ -16,27 +16,32 @@ function Login({ onSubmit }: { onSubmit: (t: string) => void }) {
   const [v, setV] = useState("");
   return (
     <div className="wrap login">
-      <h1>sherwood control plane</h1>
-      <p className="muted">
-        Paste an API token. It is held only for this tab.
-      </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (v.trim()) onSubmit(v.trim());
-        }}
-      >
-        <input
-          type="password"
-          value={v}
-          autoComplete="off"
-          onChange={(e) => setV(e.target.value)}
-          placeholder="bearer token"
-        />
-        <button style={{ marginTop: 12 }} disabled={!v.trim()}>
-          Connect
-        </button>
-      </form>
+      <div className="card">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <h1>sherwood</h1>
+        </div>
+        <p className="muted">
+          Paste an API token to connect. It is held only for this tab.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (v.trim()) onSubmit(v.trim());
+          }}
+        >
+          <input
+            type="password"
+            value={v}
+            autoComplete="off"
+            onChange={(e) => setV(e.target.value)}
+            placeholder="bearer token"
+          />
+          <button style={{ marginTop: 12, width: "100%" }} disabled={!v.trim()}>
+            Connect
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
@@ -80,29 +85,39 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
         </p>
       )}
       <div className="grid">
-        <PortfolioCard data={portfolio.data} error={portfolio.error} />
-        <ApprovalsCard
-          data={approvals.data}
-          error={approvals.error}
-          token={token}
-          onDecided={approvals.refresh}
-        />
-        <ActivityList
-          events={events}
-          data={activity.data}
-          error={activity.error}
-          audit={audit.data}
-        />
-        <Controls
-          token={token}
-          health={health.data}
-          session={session.data}
-          onChanged={refreshControls}
-        />
-        <div className="card">
-          <h2>Session</h2>
-          <p className="muted">Token held in this tab only.</p>
-          <button onClick={onLogout}>Disconnect</button>
+        <div className="area-portfolio">
+          <PortfolioCard data={portfolio.data} error={portfolio.error} />
+        </div>
+        <div className="area-approvals">
+          <ApprovalsCard
+            data={approvals.data}
+            error={approvals.error}
+            token={token}
+            onDecided={approvals.refresh}
+          />
+        </div>
+        <div className="area-activity">
+          <ActivityList
+            events={events}
+            data={activity.data}
+            error={activity.error}
+            audit={audit.data}
+          />
+        </div>
+        <div className="area-controls">
+          <Controls
+            token={token}
+            health={health.data}
+            session={session.data}
+            onChanged={refreshControls}
+          />
+        </div>
+        <div className="area-session">
+          <div className="card">
+            <h2>Session</h2>
+            <p className="muted">Token held in this tab only.</p>
+            <button onClick={onLogout}>Disconnect</button>
+          </div>
         </div>
       </div>
     </div>
