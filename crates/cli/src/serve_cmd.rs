@@ -5,6 +5,7 @@
 //! serves until Ctrl-C.
 
 use crate::config::AppConfig;
+use crate::live_preflight::{preflight_tokens, ChainLivePreflight};
 use crate::secrets_cmd;
 use anyhow::{anyhow, Context, Result};
 use sherwood_core::RiskGate;
@@ -123,6 +124,17 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
         })
     };
 
+    // ADR-0006: `POST /v1/mode` must not arm Live without re-checking that a
+    // fresh address can still receive every live-tradeable token
+    // permissionlessly. Wired unconditionally — `post_mode` only calls it
+    // once `allow_live` has already passed, so this has no effect unless
+    // `[server] allow_live = true`.
+    let live_preflight = Arc::new(ChainLivePreflight {
+        rpc_url: cfg.chain.rpc_url.clone(),
+        tokens: preflight_tokens(&cfg.chain.symbols, &cfg.chain.denom),
+        timeout: Duration::from_secs(30),
+    });
+
     let state = AppState::new(
         tokens,
         RiskGate::new(cfg.risk.to_core()),
@@ -130,7 +142,8 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
         cfg.server.to_opts(),
         store,
     )
-    .with_reloader(reloader);
+    .with_reloader(reloader)
+    .with_live_preflight(live_preflight);
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {

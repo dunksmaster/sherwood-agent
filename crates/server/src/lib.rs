@@ -494,8 +494,19 @@ mod tests {
         assert!(body_string(resp).await.contains("re-authentication failed"));
     }
 
+    /// A stub `LivePreflight` for tests — always returns the outcome it was
+    /// built with.
+    struct StubPreflight(Result<(), String>);
+
+    #[async_trait::async_trait]
+    impl state::LivePreflight for StubPreflight {
+        async fn check(&self) -> Result<(), String> {
+            self.0.clone()
+        }
+    }
+
     #[tokio::test]
-    async fn mode_toggle_to_live_is_refused_unless_allowed_in_config() {
+    async fn mode_toggle_to_live_is_refused_without_allow_live() {
         let resp = call(
             test_state(),
             post(
@@ -506,7 +517,14 @@ mod tests {
         )
         .await;
         assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert!(body_string(resp).await.contains("allow_live"));
+    }
 
+    #[tokio::test]
+    async fn mode_toggle_to_live_is_refused_without_a_configured_preflight() {
+        // allow_live alone is not enough (ADR-0006): fail closed when no
+        // pre-flight is wired up, even though it now would have been allowed
+        // pre-v0.2.6.
         let allow = state_with(ServerOpts {
             allow_live: true,
             ..ServerOpts::default()
@@ -520,8 +538,51 @@ mod tests {
             ),
         )
         .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        assert!(body_string(resp).await.contains("pre-flight"));
+    }
+
+    #[tokio::test]
+    async fn mode_toggle_to_live_succeeds_when_the_preflight_passes() {
+        let allow = state_with(ServerOpts {
+            allow_live: true,
+            ..ServerOpts::default()
+        })
+        .with_live_preflight(Arc::new(StubPreflight(Ok(()))));
+        let resp = call(
+            allow,
+            post(
+                "/v1/mode",
+                Some(ADMIN),
+                serde_json::json!({ "mode": "live", "reauth": ADMIN }),
+            ),
+        )
+        .await;
         assert_eq!(resp.status(), StatusCode::OK);
         assert!(body_string(resp).await.contains("\"mode\":\"live\""));
+    }
+
+    #[tokio::test]
+    async fn mode_toggle_to_live_is_refused_when_the_preflight_fails() {
+        let allow = state_with(ServerOpts {
+            allow_live: true,
+            ..ServerOpts::default()
+        })
+        .with_live_preflight(Arc::new(StubPreflight(Err(
+            "NVDA transfer to a fresh address reverts (0xdeadbeef)".into(),
+        ))));
+        let resp = call(
+            allow,
+            post(
+                "/v1/mode",
+                Some(ADMIN),
+                serde_json::json!({ "mode": "live", "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+        let body = body_string(resp).await;
+        assert!(body.contains("NVDA transfer to a fresh address reverts"));
     }
 
     #[tokio::test]
