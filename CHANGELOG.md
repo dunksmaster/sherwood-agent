@@ -138,6 +138,23 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   on every fill would mean an RPC round-trip per tick for a value nothing here acts on, so
   it stays a separate step. With no `[[wallets]]` configured (every config until now),
   `sherwood run` behaves exactly as before. 4 new unit tests in `sherwood-cli::runner`.
+- **Order reconciliation, and a permanent decision on broadcast (v0.2.8).**
+  [ADR-0007](docs/adr/0007-no-broadcast-capability.md): `eth_sendRawTransaction` will not be
+  added to this codebase, ever — not "not yet," a permanent boundary. Broadcasting a signed
+  transaction stays the operator's own tooling, outside this repository. What ships instead:
+  `sherwood-chain` gains one new **read**, `EvmClient::get_transaction_receipt` (same
+  boundary as every other method on the trait — the crate's "no `send_raw_transaction`"
+  doc comment stays true). New crate `sherwood-reconcile` polls that receipt for a
+  transaction hash the operator already obtained elsewhere and reconciles it against the
+  trade they expected (symbol, side, qty, price): not found (still pending), reverted (gas
+  spent, nothing to record), or confirmed — producing a `sherwood_core::Fill`, the same
+  type the paper executor produces. New `sherwood reconcile <config> <tx_hash> <symbol>
+  <buy|sell> <qty> <price> [fee]` polls up to 2 minutes and, with `[general] state_path`
+  configured, records a confirmed fill exactly like a paper fill: appended fill, updated
+  portfolio snapshot, audit-chain row. `sherwood run` and `sherwood serve` still cannot
+  move funds under any config. 3 new `sherwood-chain` tests, 5 new `sherwood-reconcile`
+  tests, 2 new `sherwood-cli::reconcile_cmd` tests. See
+  [`crates/reconcile/README.md`](crates/reconcile/README.md).
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

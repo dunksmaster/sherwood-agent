@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 sherwood-core = { path = "../core" }
 sherwood-store = { path = "../store" }
+serde_json.workspace = true
 sherwood-events = { path = "../events" }
 sherwood-secrets = { path = "../secrets" }
 sherwood-execution = { path = "../execution" }
@@ -21,6 +22,7 @@ sherwood-signer = { path = "../signer" }
 sherwood-wallets = { path = "../wallets" }
 sherwood-dex = { path = "../dex" }
 sherwood-router = { path = "../router" }
+sherwood-reconcile = { path = "../reconcile" }
 async-trait.workspace = true
 sherwood-server = { path = "../server" }
 sherwood-copytrade = { path = "../copytrade" }

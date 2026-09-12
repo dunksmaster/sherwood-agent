@@ -1,8 +1,11 @@
 //! The [`EvmClient`] trait (one required method, `request`) plus read helpers
 //! built on it, and [`HttpClient`], the `reqwest` implementation.
 //!
-//! Every helper here is a read. There is deliberately no `send_raw_transaction`,
-//! no signer, no nonce management — that is a later crate.
+//! Every helper here is a read — including [`EvmClient::get_transaction_receipt`],
+//! which reads the outcome of a transaction the operator already sent. There is
+//! deliberately no `send_raw_transaction`, no signer, no nonce management —
+//! per [ADR-0007](../../../docs/adr/0007-no-broadcast-capability.md), there
+//! never will be.
 
 use crate::abi::{self, strip0x};
 use crate::{ChainError, Result};
@@ -135,6 +138,24 @@ pub trait EvmClient: Send + Sync {
             Err(e) => Err(e),
         }
     }
+
+    /// `eth_getTransactionReceipt`. `Ok(None)` means the node has no receipt
+    /// for this hash yet (still pending, or unknown) — not an error; the
+    /// caller decides whether to keep polling. See [ADR-0007]'s note that
+    /// this is a **read**: this crate still sends nothing.
+    ///
+    /// [ADR-0007]: ../../../docs/adr/0007-no-broadcast-capability.md
+    async fn get_transaction_receipt(&self, tx_hash: &str) -> Result<Option<TxReceipt>> {
+        let ret = self
+            .request("eth_getTransactionReceipt", json!([tx_hash]))
+            .await?;
+        if ret.is_null() {
+            return Ok(None);
+        }
+        let raw: RawReceipt = serde_json::from_value(ret)
+            .map_err(|e| ChainError::Decode(format!("eth_getTransactionReceipt result: {e}")))?;
+        Ok(Some(raw.into_receipt()?))
+    }
 }
 
 /// Whether an `eth_getLogs` error looks like "the range is too wide" (as
@@ -216,6 +237,42 @@ impl RawLog {
             topics: self.topics,
             data: self.data,
             block_number: parse_quantity_str(&self.block_number)?,
+        })
+    }
+}
+
+/// A mined transaction's receipt. See [`EvmClient::get_transaction_receipt`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TxReceipt {
+    pub tx_hash: String,
+    /// `true` only for EIP-658 `status = 0x1`. `false` means it was mined
+    /// but reverted — gas was still spent.
+    pub status_ok: bool,
+    pub block_number: u64,
+    pub gas_used: u64,
+    pub to: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct RawReceipt {
+    #[serde(rename = "transactionHash")]
+    transaction_hash: String,
+    status: String,
+    #[serde(rename = "blockNumber")]
+    block_number: String,
+    #[serde(rename = "gasUsed")]
+    gas_used: String,
+    to: Option<String>,
+}
+
+impl RawReceipt {
+    fn into_receipt(self) -> Result<TxReceipt> {
+        Ok(TxReceipt {
+            tx_hash: self.transaction_hash,
+            status_ok: parse_quantity_str(&self.status)? == 1,
+            block_number: parse_quantity_str(&self.block_number)?,
+            gas_used: parse_quantity_str(&self.gas_used)?,
+            to: self.to,
         })
     }
 }
@@ -383,5 +440,47 @@ mod tests {
             Some("HOOD: blocked")
         );
         assert_eq!(decode_revert_reason("0xe450d38c").as_deref(), None);
+    }
+
+    #[tokio::test]
+    async fn get_transaction_receipt_returns_none_when_not_yet_mined() {
+        let rpc = MockRpc::new(vec![Ok(Value::Null)]);
+        assert!(rpc
+            .get_transaction_receipt("0xabc")
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn get_transaction_receipt_decodes_a_successful_receipt() {
+        let rpc = MockRpc::new(vec![Ok(json!({
+            "transactionHash": "0xabc",
+            "status": "0x1",
+            "blockNumber": "0x2a",
+            "gasUsed": "0x5208",
+            "to": "0x8876789976decbfcbbbe364623c63652db8c0904",
+        }))]);
+        let r = rpc.get_transaction_receipt("0xabc").await.unwrap().unwrap();
+        assert!(r.status_ok);
+        assert_eq!(r.block_number, 42);
+        assert_eq!(r.gas_used, 21000);
+        assert_eq!(
+            r.to.as_deref(),
+            Some("0x8876789976decbfcbbbe364623c63652db8c0904")
+        );
+    }
+
+    #[tokio::test]
+    async fn get_transaction_receipt_reports_a_reverted_transaction_honestly() {
+        let rpc = MockRpc::new(vec![Ok(json!({
+            "transactionHash": "0xabc",
+            "status": "0x0",
+            "blockNumber": "0x2a",
+            "gasUsed": "0x5208",
+            "to": null,
+        }))]);
+        let r = rpc.get_transaction_receipt("0xabc").await.unwrap().unwrap();
+        assert!(!r.status_ok, "status 0x0 must not be reported as success");
     }
 }
