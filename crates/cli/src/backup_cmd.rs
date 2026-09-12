@@ -156,6 +156,7 @@ mod tests {
             hook: Default::default(),
             chain: Default::default(),
             wallets: Vec::new(),
+            router: Default::default(),
         }
     }
 

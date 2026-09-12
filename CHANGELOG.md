@@ -129,6 +129,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   just as a manual CLI command. 4 new server unit tests (fail-closed with no pre-flight,
   pass, fail with a reason surfaced) plus 3 in the new `sherwood-cli::live_preflight`
   module. Live mode still has no order-placing path in this codebase.
+- **Runner integration (v0.2.7).** New `[router]` config section. When `[[wallets]]` are
+  configured, `sherwood run` now calls `Router::choose(notional)` and
+  `WalletRegistry::wallet_for_symbol` on every paper fill and logs which venue and wallet a
+  live order would have used — the wiring the roadmap asked for, stopping well short of
+  building a swap. Building calldata needs a live pool lookup (`sherwood dex-simulate`, a
+  deliberate, explicit, manual command per `crates/dex/README.md`); running that unattended
+  on every fill would mean an RPC round-trip per tick for a value nothing here acts on, so
+  it stays a separate step. With no `[[wallets]]` configured (every config until now),
+  `sherwood run` behaves exactly as before. 4 new unit tests in `sherwood-cli::runner`.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

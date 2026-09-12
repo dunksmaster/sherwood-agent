@@ -111,6 +111,74 @@ struct Run<'a> {
     clock: &'a dyn Clock,
     /// When set, the loop records its equity curve and fills here.
     recorder: Option<&'a mut Recording>,
+    /// When set (`[[wallets]]` configured), the loop logs which wallet and
+    /// venue each fill would have used live. See [`LivePreview`].
+    live_preview: Option<LivePreview>,
+}
+
+/// v0.2.6 runner integration: if `[[wallets]]` are configured, log — never
+/// trade — which wallet and venue (`sherwood-router`) each paper fill would
+/// have used live. This is the wiring the roadmap asked for; it stops well
+/// short of building a swap. Building calldata needs a live pool lookup
+/// (`sherwood dex-simulate`, a deliberate, explicit, manual command per
+/// crates/dex/README.md) — running that unattended on every fill would mean
+/// an RPC round-trip per tick for a value nothing here acts on, so it stays
+/// a separate step, not part of the loop.
+struct LivePreview {
+    wallets: sherwood_wallets::WalletRegistry,
+    router: sherwood_router::Router,
+}
+
+impl LivePreview {
+    /// `Ok(None)` when no `[[wallets]]` are configured — the common case,
+    /// and the only one that needs no vault access.
+    fn build(cfg: &AppConfig) -> Result<Option<Self>> {
+        if cfg.wallets.is_empty() {
+            return Ok(None);
+        }
+        let vault = crate::secrets_cmd::open_vault()
+            .context("opening the vault to resolve [[wallets]] key_ref")?;
+        let configs: Vec<_> = cfg
+            .wallets
+            .iter()
+            .map(crate::config::WalletEntry::to_core)
+            .collect();
+        let wallets = sherwood_wallets::WalletRegistry::load(&configs, &vault)
+            .context("loading [[wallets]]")?;
+        let router = sherwood_router::Router::new(cfg.router.to_core())
+            .context("invalid [router] config")?;
+        tracing::info!(
+            wallets = wallets.len(),
+            "live-route preview enabled — logs venue + wallet per fill, trades nothing"
+        );
+        Ok(Some(Self { wallets, router }))
+    }
+
+    /// Log which wallet and venue this fill would have used live. Builds no
+    /// calldata, signs nothing, sends nothing.
+    fn note(&self, fill: &Fill) {
+        let symbol = &fill.asset.symbol;
+        let notional = fill.qty * fill.price;
+        let Some(wallet) = self.wallets.wallet_for_symbol(symbol) else {
+            tracing::info!(
+                symbol = %symbol,
+                "live-route preview: no configured wallet allows this symbol"
+            );
+            return;
+        };
+        match self.router.choose(notional) {
+            Ok(choice) => tracing::info!(
+                symbol = %symbol,
+                notional = %notional,
+                venue = %choice.venue,
+                wallet = %wallet.name(),
+                address = %wallet.address_hex(),
+                reason = %choice.reason,
+                "live-route preview (paper fill — nothing sent)"
+            ),
+            Err(e) => tracing::warn!(symbol = %symbol, "live-route preview: {e}"),
+        }
+    }
 }
 
 async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
@@ -123,6 +191,7 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
         store,
         clock,
         mut recorder,
+        live_preview,
     } = cfg;
 
     let bus = Bus::new(1000);
@@ -232,6 +301,9 @@ async fn run_loop(cfg: Run<'_>, decider: &dyn Decider) -> Result<()> {
                         );
                         if let Some(r) = recorder.as_mut() {
                             r.fills.push(fill.clone());
+                        }
+                        if let Some(preview) = &live_preview {
+                            preview.note(&fill);
                         }
                         bus.publish(Event::OrderFilled(fill));
                     }
@@ -357,6 +429,7 @@ pub async fn demo(shutdown: &AtomicBool) -> Result<()> {
             store: None,
             clock: &SystemClock,
             recorder: None,
+            live_preview: None,
         },
         &RuleDecider::new(RuleConfig::default()),
     )
@@ -408,6 +481,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
     };
 
     let feed = build_feed(&cfg)?;
+    let live_preview = LivePreview::build(&cfg)?;
 
     run_loop(
         Run {
@@ -419,6 +493,7 @@ pub async fn run(cfg: AppConfig, shutdown: &AtomicBool) -> Result<()> {
             store,
             clock: &SystemClock,
             recorder: None,
+            live_preview,
         },
         decider.as_ref(),
     )
@@ -445,6 +520,7 @@ pub async fn run_backtest(cfg: &AppConfig, shutdown: &AtomicBool) -> Result<Reco
             store: None,
             clock: &SystemClock,
             recorder: Some(&mut rec),
+            live_preview: None,
         },
         decider.as_ref(),
     )
@@ -534,6 +610,7 @@ mod tests {
                 store: Some(store.clone()),
                 clock: &clock,
                 recorder: None,
+                live_preview: None,
             },
             &RuleDecider::new(RuleConfig::default()),
         )
@@ -588,6 +665,7 @@ mod tests {
             hook: Default::default(),
             chain: Default::default(),
             wallets: Vec::new(),
+            router: Default::default(),
         };
 
         let rec = run_backtest(&cfg, &AtomicBool::new(false)).await.unwrap();
@@ -636,6 +714,7 @@ mod tests {
             hook: Default::default(),
             chain: Default::default(),
             wallets: Vec::new(),
+            router: Default::default(),
         };
 
         run(cfg, &AtomicBool::new(false)).await.unwrap();
@@ -648,5 +727,93 @@ mod tests {
             sherwood_store::AuditVerification::Ok { .. }
         ));
         assert_eq!(s.audit_tail(1).await.unwrap()[0].kind, "run_end");
+    }
+
+    struct MockVault(std::collections::HashMap<String, String>);
+    impl sherwood_secrets::SecretsVault for MockVault {
+        fn get(
+            &self,
+            name: &str,
+        ) -> Result<Option<sherwood_secrets::SecretString>, sherwood_secrets::VaultError> {
+            Ok(self
+                .0
+                .get(name)
+                .map(|v| sherwood_secrets::SecretString::new(v.clone())))
+        }
+        fn set(&self, _: &str, _: &str) -> Result<(), sherwood_secrets::VaultError> {
+            unreachable!("not used by LivePreview")
+        }
+        fn delete(&self, _: &str) -> Result<bool, sherwood_secrets::VaultError> {
+            unreachable!("not used by LivePreview")
+        }
+        fn list(&self) -> Result<Vec<String>, sherwood_secrets::VaultError> {
+            unreachable!("not used by LivePreview")
+        }
+    }
+
+    fn wallet_registry(symbol: &str) -> sherwood_wallets::WalletRegistry {
+        let vault = MockVault(std::collections::HashMap::from([(
+            "k".to_owned(),
+            "11".repeat(32),
+        )]));
+        let cfg = sherwood_wallets::WalletConfig {
+            name: "primary".into(),
+            key_ref: "vault:k".into(),
+            allowed_symbols: vec![symbol.to_owned()],
+            limits: sherwood_wallets::budget::WalletLimits::default(),
+        };
+        sherwood_wallets::WalletRegistry::load(&[cfg], &vault).unwrap()
+    }
+
+    fn make_fill(symbol: &str, qty: Decimal, price: Decimal) -> Fill {
+        Fill {
+            order_id: OrderId::new("t-1"),
+            asset: Asset::symbol(symbol),
+            side: Side::Buy,
+            qty,
+            price,
+            fee: dec!(0),
+            venue: Venue::Paper,
+            at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn live_preview_build_is_none_with_no_wallets_configured() {
+        let cfg = base_config_no_wallets();
+        assert!(LivePreview::build(&cfg).unwrap().is_none());
+    }
+
+    #[test]
+    fn live_preview_note_does_not_panic_for_a_matching_wallet() {
+        let preview = LivePreview {
+            wallets: wallet_registry("NVDA"),
+            router: sherwood_router::Router::amm_only(),
+        };
+        preview.note(&make_fill("NVDA", dec!(1), dec!(100))); // notional 100, AMM
+    }
+
+    #[test]
+    fn live_preview_note_does_not_panic_with_no_matching_wallet() {
+        let preview = LivePreview {
+            wallets: wallet_registry("NVDA"),
+            router: sherwood_router::Router::amm_only(),
+        };
+        preview.note(&make_fill("TSLA", dec!(1), dec!(100))); // no wallet allows TSLA
+    }
+
+    fn base_config_no_wallets() -> AppConfig {
+        AppConfig {
+            general: crate::config::General::default(),
+            risk: Default::default(),
+            ai: Default::default(),
+            copytrade: Default::default(),
+            sniper: Default::default(),
+            server: Default::default(),
+            hook: Default::default(),
+            chain: Default::default(),
+            wallets: Vec::new(),
+            router: Default::default(),
+        }
     }
 }

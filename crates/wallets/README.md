@@ -34,6 +34,9 @@ Never prints a key. See `config.example.toml` for the `[[wallets]]` schema.
 
 - Any RPC client, or a way to actually place a trade (`sherwood-dex`,
   v0.2.4).
-- Wiring into `sherwood run`'s order path — nothing yet picks a wallet to
-  spend from for a live order. `wallet_for_symbol` exists for that future
-  caller but nothing calls it yet.
+- Signing or sending anything. `sherwood run` calls `wallet_for_symbol` per
+  fill (v0.2.6 runner integration) to log which wallet a live order would
+  have used, alongside `sherwood-router`'s venue choice — logging only, no
+  calldata built, no RPC call. Actually building and signing a swap is still
+  a separate, explicit step (`sherwood dex-simulate`, then
+  `sherwood-signer`).
