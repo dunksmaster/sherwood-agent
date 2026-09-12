@@ -57,6 +57,7 @@ function Card({
       </div>
       <span className="muted" style={{ fontSize: 12 }}>
         {a.order.reason} · {new Date(a.created_at).toLocaleTimeString()}
+        {a.decided_at ? ` → decided ${new Date(a.decided_at).toLocaleTimeString()}` : ""}
         {a.decision_reason ? ` · "${a.decision_reason}"` : ""}
       </span>
       {pending && (
