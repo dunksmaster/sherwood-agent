@@ -103,8 +103,9 @@ poll_interval_secs = 15     # seconds between completing one round of all symbol
 
 # [[wallets]]
 # A named Robinhood Chain wallet (ADR-0006, sherwood-wallets). Loaded and
-# reported by `sherwood wallets config.toml` — never wired into a trade path
-# yet (that's sherwood-dex). The key comes from the vault ONLY:
+# reported by `sherwood wallets config.toml`. When at least one is configured,
+# `sherwood run` logs (does not trade) which wallet + venue each paper fill
+# would have used live — see [router] below. The key comes from the vault ONLY:
 #   sherwood secrets set evm_wallet   # pastes the hex private key, stdin only
 # name                = "primary"
 # key_ref             = "vault:evm_wallet"  # must be a vault: reference, like ai.api_key
@@ -112,3 +113,10 @@ poll_interval_secs = 15     # seconds between completing one round of all symbol
 # max_tx_count        = 0             # 0 = unlimited
 # max_notional        = 0             # 0 = unlimited
 # max_duration_secs   = 0             # 0 = unlimited
+
+[router]
+# Venue-selection policy (ADR-0006, sherwood-router). Below rfq_min_notional,
+# or with no RFQ venue configured, every order routes to the AMM (Uniswap
+# v4) — that's every real config today, since no RFQ venue is integrated.
+# rfq_min_notional = 10000   # unset = notional never selects RFQ
+rfq_available = false        # leave false — no RFQ client exists in this codebase

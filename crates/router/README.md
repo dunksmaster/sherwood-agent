@@ -55,5 +55,6 @@ sherwood route 9999 10000 true        # -> AMM (below threshold)
 - Building the AMM swap once `AMM` is chosen — that's `sherwood-dex`
   (`ExactInputSingleSwap`).
 - Picking the wallet / checking its spend ceiling — that's `sherwood-wallets`.
-- Wiring routing into the `sherwood run` order flow — a later step; nothing
-  calls `Router::choose` in anger yet.
+- Placing anything. `sherwood run` calls `Router::choose` per fill, once
+  `[[wallets]]` are configured (v0.2.6 runner integration), to log which
+  venue a live order would have used — logging only, nothing sent.

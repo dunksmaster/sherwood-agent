@@ -52,6 +52,8 @@ pub struct AppConfig {
     pub chain: ChainSection,
     #[serde(default)]
     pub wallets: Vec<WalletEntry>,
+    #[serde(default)]
+    pub router: RouterSection,
 }
 
 #[derive(Debug, Deserialize)]
@@ -524,6 +526,38 @@ impl WalletEntry {
     }
 }
 
+/// `[router]` — venue-selection policy for the routing preview
+/// `sherwood run` logs once wallets are configured (v0.2.6 runner
+/// integration). Pure decision, same as `sherwood-router` itself: nothing
+/// here builds calldata or touches the chain.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct RouterSection {
+    /// Orders at or above this notional would route to RFQ — but only when
+    /// `rfq_available` is also true. `None` (the default) means notional
+    /// alone never selects RFQ.
+    pub rfq_min_notional: Option<Decimal>,
+    /// Whether an RFQ venue is actually reachable. No RFQ client exists in
+    /// this codebase — leave this `false` (the default) in every real config.
+    pub rfq_available: bool,
+}
+
+impl RouterSection {
+    fn validate(&self) -> Result<()> {
+        sherwood_router::Router::new(self.to_core())
+            .map(|_| ())
+            .map_err(|e| anyhow::anyhow!("[router]: {e}"))
+    }
+
+    #[must_use]
+    pub fn to_core(&self) -> sherwood_router::RouterConfig {
+        sherwood_router::RouterConfig {
+            rfq_min_notional: self.rfq_min_notional,
+            rfq_available: self.rfq_available,
+        }
+    }
+}
+
 impl AppConfig {
     pub fn load(path: &Path) -> Result<Self> {
         let raw = std::fs::read_to_string(path)
@@ -560,6 +594,7 @@ impl AppConfig {
         self.risk.validate()?;
         self.server.validate()?;
         self.chain.validate()?;
+        self.router.validate()?;
         for w in &self.wallets {
             w.validate()?;
         }
@@ -626,6 +661,7 @@ mod tests {
             hook: HookSection::default(),
             chain: ChainSection::default(),
             wallets: Vec::new(),
+            router: RouterSection::default(),
         }
     }
 
