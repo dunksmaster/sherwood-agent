@@ -12,15 +12,15 @@
 //! simulation for lack of balance/allowance, which is not a bug in the
 //! encoding. `amount_in_raw` is in the token's base units (no decimal
 //! scaling here — see `sherwood chain-price` for a token's decimals).
+//!
+//! The build-and-simulate logic itself lives in
+//! [`crate::dex_preview`], shared with `POST /v1/dex/simulate` (v0.2.9).
 
+use crate::dex_preview::{self, UNIVERSAL_ROUTER};
 use anyhow::{Context, Result};
-use sherwood_chain::tokens::{self, DEFAULT_RPC, POOL_MANAGER, STATE_VIEW};
-use sherwood_chain::univ4::{self, Decimals};
-use sherwood_chain::{EvmClient, HttpClient};
-use sherwood_dex::{quote, ExactInputSingleSwap};
+use sherwood_chain::tokens::DEFAULT_RPC;
+use sherwood_chain::HttpClient;
 use std::time::Duration;
-
-const UNIVERSAL_ROUTER: &str = "0x8876789976decbfcbbbe364623c63652db8c0904";
 
 pub fn usage() -> ! {
     eprintln!(
@@ -47,85 +47,34 @@ pub async fn run(mut args: impl Iterator<Item = String>) -> Result<()> {
         .context("slippage_bps")?;
     let rpc = args.next().unwrap_or_else(|| DEFAULT_RPC.to_owned());
 
-    let (token_symbol, token_addr, token_dec) = tokens::resolve(&token_arg);
-    let (denom_symbol, denom_addr, denom_dec) = tokens::resolve(&denom_arg);
-
     let client = HttpClient::new(rpc.clone(), Duration::from_secs(30))?;
-    let head = client
-        .block_number()
-        .await
-        .context("connecting to the RPC")?;
+    let preview =
+        dex_preview::build(&client, &token_arg, amount_in, &denom_arg, slippage_bps).await?;
 
-    let best = univ4::find_best_pool(
-        &client,
-        univ4::Deployment {
-            pool_manager: POOL_MANAGER,
-            state_view: STATE_VIEW,
-        },
-        &token_addr,
-        &denom_addr,
-        0,
-        head,
-    )
-    .await
-    .with_context(|| format!("finding a {token_symbol}/{denom_symbol} pool"))?;
-
-    let spot_price = univ4::quote_pool(
-        &client,
-        STATE_VIEW,
-        &best.key,
-        &token_addr,
-        Decimals {
-            token: token_dec,
-            denominator: denom_dec,
-        },
-    )
-    .await
-    .context("reading the spot price")?;
-
-    let zero_for_one = best.key.currency0.eq_ignore_ascii_case(&token_addr);
-    // Rough expected output from the spot price (already denom-per-token,
-    // regardless of which side is currency0/1) — a real caller should use a
-    // live quoter for anything that matters; this is a simulation aid.
-    let scale = 10u128.pow(u32::from(denom_dec));
-    let expected_out_human = rust_decimal::Decimal::from(amount_in)
-        / rust_decimal::Decimal::from(10u128.pow(u32::from(token_dec)))
-        * spot_price;
-    let expected_out_raw: u128 = (expected_out_human * rust_decimal::Decimal::from(scale))
-        .try_into()
-        .context("expected output does not fit u128")?;
-    let amount_out_minimum = quote::amount_out_minimum(expected_out_raw, slippage_bps)?;
-
-    let swap = ExactInputSingleSwap {
-        pool: best.key,
-        zero_for_one,
-        amount_in,
-        amount_out_minimum,
-    };
-    let deadline = quote::deadline_from_now(1800);
-    let calldata = swap.execute_calldata(deadline)?;
-
-    println!("{rpc}\nblock {head}");
+    println!("{rpc}\nblock {}", preview.head);
     println!(
         "pool  fee {} / tickSpacing {} / liquidity {}",
-        swap.pool.fee, swap.pool.tick_spacing, best.liquidity
+        preview.pool_fee, preview.pool_tick_spacing, preview.pool_liquidity
     );
-    println!("swap  {amount_in} {token_symbol} -> min {amount_out_minimum} {denom_symbol} (slippage {slippage_bps}bps)");
+    println!(
+        "swap  {} {} -> min {} {} (slippage {}bps)",
+        preview.amount_in,
+        preview.token_symbol,
+        preview.amount_out_minimum,
+        preview.denom_symbol,
+        preview.slippage_bps
+    );
     println!(
         "calldata  {} bytes to UniversalRouter {UNIVERSAL_ROUTER}",
-        calldata.len()
+        preview.calldata.len()
     );
-    println!("calldata_hex {}", sherwood_chain::abi::to_hex(&calldata));
+    println!(
+        "calldata_hex {}",
+        sherwood_chain::abi::to_hex(&preview.calldata)
+    );
     println!("simulating as from={from} …\n");
 
-    match client
-        .call_from(
-            &from,
-            UNIVERSAL_ROUTER,
-            &sherwood_chain::abi::to_hex(&calldata),
-        )
-        .await
-    {
+    match dex_preview::simulate(&client, &from, &preview).await {
         Ok(ret) => {
             println!("✅ eth_call succeeded — {} bytes returned", ret.len());
             println!("   the calldata is well-formed AND {from} has the balance + Permit2");

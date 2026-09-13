@@ -32,6 +32,23 @@ Planned, to be written when the step that needs them arrives:
 
 Decisions that shaped the project but do not each warrant a full ADR. Newest first.
 
+### 2026-09-13
+
+**`sherwood-wallets` stays out of `sherwood-server` (v0.2.9).** Adding `POST
+/v1/route` and `POST /v1/dex/simulate` raised the question of a wallets
+endpoint too — but loading the wallet registry needs the vault, and nothing
+that touches secrets is wired into `sherwood-server` today, even though it's
+loopback-only. Router and dex-simulate stayed in because neither needs a
+key: the router is a pure decision, dex-simulate is a read-only `eth_call`
+built from a caller-supplied `from` address, not a wallet the server holds.
+Adding wallet access would make the one network-facing process in this
+codebase also a key-holding one — a real increase in blast radius for a
+feature (viewing wallet names/addresses) with no operational need yet: the
+CLI (`sherwood wallets`) already does this, offline, for the one operator
+who has the vault passphrase. *Revisit if:* a second operator or a remote
+dashboard scenario makes CLI-only wallet visibility a real limitation —
+worth its own ADR at that point, not a quiet addition.
+
 ### 2026-09-04
 
 **v0.1.0 released.** `v0.1.0` tagged at `9249b1a` and published as a GitHub

@@ -30,6 +30,8 @@ Keep it in sync with `crates/server/src/routes.rs` when routes change.
 | `POST` | `/v1/hook/pretooluse` | operator | The `PreToolUse` order gate. Body: `{ tool_call: { name, arguments }, context: { portfolio, ref_price?, equity, unrealized_pnl, last_order_at? } }`. Returns `200` with `{ "decision": "allow" }` or `{ "decision": "deny", "reason": … }`. A denied tool call is **not** an HTTP error; only a malformed request is `4xx`. |
 | `POST` | `/v1/mode` | admin | `{ mode: "paper"\|"live", reauth: "<admin token>" }`. `live` is `403` unless `[server] allow_live = true` **and** the [ADR-0006](adr/0006-robinhood-chain-venue.md) pre-flight passes (`sherwood serve` re-runs `check_transfer_open` against every `[chain]` symbol + `denom` on each attempt) — a failing token, an RPC error, or no `[chain]` symbols configured all refuse, with the reason in the response body. |
 | `POST` | `/v1/kill` | admin | `{ engage: bool, reauth: "<admin token>" }`. Engaging makes the hook deny every order immediately. |
+| `POST` | `/v1/route` | operator | `{ notional: "<decimal>" }` → `{ venue: "amm"\|"rfq", reason }` — [`sherwood-router`](../crates/router/README.md)'s venue choice for that notional. Pure decision: no RPC, no calldata, no broadcast. |
+| `POST` | `/v1/dex/simulate` | operator | `{ from, token, amount_in_raw, denom?, slippage_bps? }` → the same fields `sherwood dex-simulate` prints, as JSON. `eth_call`-simulates the swap against the live chain; signs and sends nothing. `404` if the server has no `[chain]` endpoint configured for this. |
 
 Roles are assigned by which configured token authenticates: `token_ref` → admin, optional
 `operator_token_ref` → operator, `viewer_token_ref` → viewer. The server binds loopback only

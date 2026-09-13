@@ -2083,6 +2083,7 @@ dependencies = [
  "serde_json",
  "sherwood-core",
  "sherwood-execution",
+ "sherwood-router",
  "sherwood-secrets",
  "sherwood-store",
  "subtle",

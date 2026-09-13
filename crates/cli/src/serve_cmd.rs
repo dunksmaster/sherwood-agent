@@ -5,6 +5,7 @@
 //! serves until Ctrl-C.
 
 use crate::config::AppConfig;
+use crate::dex_preview::ChainDexSimulator;
 use crate::live_preflight::{preflight_tokens, ChainLivePreflight};
 use crate::secrets_cmd;
 use anyhow::{anyhow, Context, Result};
@@ -135,15 +136,26 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
         timeout: Duration::from_secs(30),
     });
 
+    // `POST /v1/route` and `POST /v1/dex/simulate` (v0.2.9): read-only
+    // previews of what a live order would do. Wired unconditionally, same as
+    // the pre-flight above — neither touches a wallet or the vault.
+    let dex_simulator = Arc::new(ChainDexSimulator {
+        rpc_url: cfg.chain.rpc_url.clone(),
+    });
+
+    let mut opts = cfg.server.to_opts();
+    opts.router_config = cfg.router.to_core();
+
     let state = AppState::new(
         tokens,
         RiskGate::new(cfg.risk.to_core()),
         allowlist,
-        cfg.server.to_opts(),
+        opts,
         store,
     )
     .with_reloader(reloader)
-    .with_live_preflight(live_preflight);
+    .with_live_preflight(live_preflight)
+    .with_dex_simulator(dex_simulator);
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {

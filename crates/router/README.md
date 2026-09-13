@@ -33,11 +33,14 @@ integrating an RFQ client later is a config change (`rfq_available: true` + a
 with no threshold (that config can never pick RFQ — write `rfq_available:
 false` if AMM-only is the intent). `choose` rejects a non-positive notional.
 
-## CLI
+## CLI and server
 
 ```
 sherwood route <notional> [rfq_min_notional] [rfq_available]
 ```
+
+`sherwood serve` also exposes this over HTTP: `POST /v1/route` (operator role),
+body `{ "notional": "<decimal>" }`, same response shape as the CLI prints.
 
 Prints the venue and the reason. `rfq_available` is any of `1｜true｜yes` /
 `0｜false｜no` (default `false`). Examples:
@@ -58,3 +61,5 @@ sherwood route 9999 10000 true        # -> AMM (below threshold)
 - Placing anything. `sherwood run` calls `Router::choose` per fill, once
   `[[wallets]]` are configured (v0.2.6 runner integration), to log which
   venue a live order would have used — logging only, nothing sent.
+  `POST /v1/route` (v0.2.9) is the same read: an on-demand preview, not a
+  path to an order.

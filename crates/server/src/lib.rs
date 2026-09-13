@@ -113,6 +113,8 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/hook/pretooluse", post(routes::pretooluse))
         .route("/v1/mode", post(routes::post_mode))
         .route("/v1/kill", post(routes::post_kill))
+        .route("/v1/route", post(routes::post_route))
+        .route("/v1/dex/simulate", post(routes::post_dex_simulate))
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
     let mut app = Router::new()
@@ -1021,5 +1023,126 @@ mod tests {
         .await
         .unwrap_err();
         assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn route_amm_only_by_default() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/route",
+                Some(OPERATOR),
+                serde_json::json!({ "notional": "500" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"venue\":\"amm\""), "{body}");
+    }
+
+    #[tokio::test]
+    async fn route_rejects_a_non_positive_notional() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/route",
+                Some(OPERATOR),
+                serde_json::json!({ "notional": "0" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn route_requires_operator_role() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/route",
+                Some(VIEWER),
+                serde_json::json!({ "notional": "500" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    /// A stub `DexSimulator` for tests — always returns the outcome it was
+    /// built with.
+    struct StubDexSimulator(Result<state::DexSimulateOutcome, String>);
+
+    #[async_trait::async_trait]
+    impl state::DexSimulator for StubDexSimulator {
+        async fn simulate(
+            &self,
+            _req: state::DexSimulateRequest,
+        ) -> Result<state::DexSimulateOutcome, String> {
+            self.0.clone()
+        }
+    }
+
+    fn stub_outcome() -> state::DexSimulateOutcome {
+        state::DexSimulateOutcome {
+            token_symbol: "NVDA".into(),
+            denom_symbol: "USDG".into(),
+            pool_fee: 3000,
+            pool_tick_spacing: 60,
+            pool_liquidity: "471606866768494200".into(),
+            amount_out_minimum: "0".into(),
+            calldata_hex: "0x3593564c".into(),
+            ok: true,
+            detail: "eth_call succeeded".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn dex_simulate_404s_when_not_configured() {
+        let resp = call(
+            test_state(),
+            post(
+                "/v1/dex/simulate",
+                Some(OPERATOR),
+                serde_json::json!({ "from": "0xabc", "token": "NVDA", "amount_in_raw": "1" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn dex_simulate_returns_the_simulator_outcome() {
+        let state = test_state().with_dex_simulator(Arc::new(StubDexSimulator(Ok(stub_outcome()))));
+        let resp = call(
+            state,
+            post(
+                "/v1/dex/simulate",
+                Some(OPERATOR),
+                serde_json::json!({ "from": "0xabc", "token": "NVDA", "amount_in_raw": "1" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"ok\":true"), "{body}");
+        assert!(body.contains("NVDA"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn dex_simulate_surfaces_a_simulator_error_as_bad_request() {
+        let state = test_state()
+            .with_dex_simulator(Arc::new(StubDexSimulator(Err("rpc unreachable".into()))));
+        let resp = call(
+            state,
+            post(
+                "/v1/dex/simulate",
+                Some(OPERATOR),
+                serde_json::json!({ "from": "0xabc", "token": "NVDA", "amount_in_raw": "1" }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(body_string(resp).await.contains("rpc unreachable"));
     }
 }

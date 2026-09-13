@@ -80,6 +80,59 @@ pub trait LivePreflight: Send + Sync {
     async fn check(&self) -> Result<(), String>;
 }
 
+/// `POST /v1/dex/simulate` input — the same arguments `sherwood dex-simulate`
+/// takes on the command line.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct DexSimulateRequest {
+    /// The address to simulate the swap from. Must already hold `token` and
+    /// have approved Permit2 for it, or the simulation correctly fails for
+    /// lack of balance/allowance — that is not a bug in the request.
+    pub from: String,
+    /// A known symbol (`"NVDA"`) or a raw token address — the input token.
+    pub token: String,
+    /// Base units (no decimal scaling) of `token` to swap, as a decimal
+    /// string (it can exceed `u64`, e.g. an 18-decimal token).
+    pub amount_in_raw: String,
+    /// A known symbol or raw address for the output token. Defaults to
+    /// `"USDG"` when omitted.
+    #[serde(default)]
+    pub denom: Option<String>,
+    /// Slippage bound in basis points. Defaults to 50 (0.5%) when omitted.
+    #[serde(default)]
+    pub slippage_bps: Option<u32>,
+}
+
+/// `POST /v1/dex/simulate` output: what `eth_call`-simulating the built swap
+/// against the live chain found. Signs and sends nothing — same boundary as
+/// `sherwood-dex` itself.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DexSimulateOutcome {
+    pub token_symbol: String,
+    pub denom_symbol: String,
+    pub pool_fee: u32,
+    pub pool_tick_spacing: i32,
+    pub pool_liquidity: String,
+    pub amount_out_minimum: String,
+    /// `0x`-prefixed calldata this simulation ran — the same bytes a real
+    /// swap would sign and send, never done here.
+    pub calldata_hex: String,
+    /// Whether the `eth_call` simulation succeeded.
+    pub ok: bool,
+    /// Human-readable detail: bytes returned on success, or why it reverted.
+    pub detail: String,
+}
+
+/// Runs [`DexSimulateRequest`] against the live chain. Read-only — an
+/// `eth_call`, never a send — same boundary as `sherwood-dex`.
+/// `sherwood serve` wires a real implementation
+/// (`sherwood_cli::dex_preview::ChainDexSimulator`); `None` on [`AppState`]
+/// just means the feature isn't configured on this server, not a security
+/// gate like [`LivePreflight`].
+#[async_trait::async_trait]
+pub trait DexSimulator: Send + Sync {
+    async fn simulate(&self, req: DexSimulateRequest) -> Result<DexSimulateOutcome, String>;
+}
+
 /// Knobs that come from `[server]` config.
 #[derive(Debug, Clone)]
 pub struct ServerOpts {
@@ -100,6 +153,10 @@ pub struct ServerOpts {
     /// Per-session spend caps (order count / notional / duration). Any `0` is
     /// "no limit".
     pub budget_caps: BudgetCaps,
+    /// Venue-selection policy for `POST /v1/route` (`[router]` config).
+    /// Cheap and pure — no RPC, no secrets — so it lives directly on
+    /// `AppState`, unlike [`DexSimulator`] which needs a chain client.
+    pub router_config: sherwood_router::RouterConfig,
 }
 
 impl Default for ServerOpts {
@@ -112,6 +169,7 @@ impl Default for ServerOpts {
             approval_mode: ApprovalMode::Auto,
             approval_timeout: Duration::from_secs(60),
             budget_caps: BudgetCaps::default(),
+            router_config: sherwood_router::RouterConfig::default(),
         }
     }
 }
@@ -138,6 +196,14 @@ pub struct AppState {
     /// `Live`. `None` means no pre-flight is wired up — live mode then stays
     /// unreachable (fail closed) regardless of `allow_live`.
     pub live_preflight: Option<Arc<dyn LivePreflight>>,
+    /// Venue-selection policy for `POST /v1/route`. Always present — an
+    /// unconfigured `[router]` section is just AMM-only, not a missing
+    /// feature.
+    pub router_config: sherwood_router::RouterConfig,
+    /// Backs `POST /v1/dex/simulate`. `None` = not wired up on this server
+    /// (e.g. tests, or a `sherwood serve` invocation with no `[chain]`
+    /// endpoint) — the route reports that plainly, not a `500`.
+    pub dex_simulator: Option<Arc<dyn DexSimulator>>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -167,6 +233,8 @@ impl AppState {
             budget: Arc::new(SessionBudget::new(opts.budget_caps)),
             reloader: None,
             live_preflight: None,
+            router_config: opts.router_config,
+            dex_simulator: None,
             started_at: Utc::now(),
         }
     }
@@ -180,6 +248,12 @@ impl AppState {
     #[must_use]
     pub fn with_live_preflight(mut self, preflight: Arc<dyn LivePreflight>) -> Self {
         self.live_preflight = Some(preflight);
+        self
+    }
+
+    #[must_use]
+    pub fn with_dex_simulator(mut self, simulator: Arc<dyn DexSimulator>) -> Self {
+        self.dex_simulator = Some(simulator);
         self
     }
 

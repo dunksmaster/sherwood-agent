@@ -17,6 +17,8 @@
 //! | `POST` | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | `POST` | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
+//! | `POST` | `/v1/route` | operator | which venue (AMM/RFQ) an order of this notional would use |
+//! | `POST` | `/v1/dex/simulate` | operator | `eth_call`-simulate a swap; signs and sends nothing |
 //!
 //! A *denied* tool call is a `200` with `{"decision":"deny",…}` — the caller
 //! (the agent's `PreToolUse` hook script) maps the body onto the CLI's
@@ -49,7 +51,7 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::auth::{Caller, Role};
 use crate::error::{ApiError, ApiResult};
-use crate::state::{AppState, Mode};
+use crate::state::{AppState, DexSimulateRequest, Mode};
 
 fn store(state: &AppState) -> ApiResult<&SqliteStore> {
     state
@@ -336,6 +338,59 @@ pub async fn post_kill(
         mode: control.mode,
         kill_switch: control.kill_switch(),
     }))
+}
+
+#[derive(Deserialize)]
+pub struct RouteRequest {
+    /// Quote-currency notional (e.g. USDG), as a decimal string.
+    pub notional: Decimal,
+}
+
+#[derive(Serialize)]
+pub struct RouteView {
+    /// `"amm"` or `"rfq"` — see `sherwood_router::Venue`.
+    pub venue: String,
+    pub reason: String,
+}
+
+/// Which venue (AMM or RFQ) an order of this notional would route to, per
+/// `sherwood-router`. Pure decision — no RPC, no calldata, no broadcast.
+pub async fn post_route(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<RouteRequest>,
+) -> ApiResult<Json<RouteView>> {
+    caller.require(Role::Operator)?;
+
+    let router = sherwood_router::Router::new(state.router_config.clone())
+        .map_err(|e| ApiError::internal(format!("[router] config: {e}")))?;
+    let choice = router
+        .choose(req.notional)
+        .map_err(|e| ApiError::bad_request(e.to_string()))?;
+    Ok(Json(RouteView {
+        venue: choice.venue.as_str().to_ascii_lowercase(),
+        reason: choice.reason,
+    }))
+}
+
+/// `eth_call`-simulate a swap built by `sherwood-dex` against the live
+/// chain. Signs and sends nothing — same boundary as the CLI's
+/// `sherwood dex-simulate`, which this wraps.
+pub async fn post_dex_simulate(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<DexSimulateRequest>,
+) -> ApiResult<Json<crate::state::DexSimulateOutcome>> {
+    caller.require(Role::Operator)?;
+
+    let simulator = state.dex_simulator.as_ref().ok_or_else(|| {
+        ApiError::not_found("dex-simulate is not configured on this server (no [chain] endpoint)")
+    })?;
+    let outcome = simulator
+        .simulate(req)
+        .await
+        .map_err(ApiError::bad_request)?;
+    Ok(Json(outcome))
 }
 
 // ---- read-only views over the persisted state ----
