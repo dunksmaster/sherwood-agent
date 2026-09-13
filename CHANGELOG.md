@@ -155,6 +155,20 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   move funds under any config. 3 new `sherwood-chain` tests, 5 new `sherwood-reconcile`
   tests, 2 new `sherwood-cli::reconcile_cmd` tests. See
   [`crates/reconcile/README.md`](crates/reconcile/README.md).
+- **Server API for the v0.2 stack (v0.2.9).** `sherwood-server` gains two operator-role
+  routes: `POST /v1/route` (`sherwood-router`'s venue choice for a notional — pure decision,
+  no RPC, added as a direct dependency since it's safe) and `POST /v1/dex/simulate` (the same
+  build-and-`eth_call` logic as `sherwood dex-simulate`, factored out of `dex_simulate_cmd.rs`
+  into `sherwood-cli::dex_preview` so the CLI command and the new
+  `sherwood_server::state::DexSimulator` trait impl share one implementation instead of two).
+  `sherwood-wallets` is deliberately **not** wired into the server — it needs the vault, and
+  nothing that touches secrets is wired into the network-facing process; see the
+  [2026-09-13 decision log entry](docs/DECISIONS.md#2026-09-13). `sherwood run` and
+  `sherwood serve` still cannot move funds under any config. 6 new `sherwood-server` route
+  tests; `sherwood-cli`, `sherwood-server`, and `sherwood-dex` test counts otherwise
+  unchanged (refactor, not new logic, on the CLI side). Verified live: `POST
+  /v1/dex/simulate` for a real 5 USDG → NVDA swap returns `eth_call succeeded` against the
+  live chain, same as the CLI command it wraps.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

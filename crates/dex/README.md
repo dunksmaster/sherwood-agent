@@ -68,7 +68,10 @@ actual funded, Permit2-approved wallet.** Before signing anything for real:
 1. Build the swap.
 2. `sherwood dex-simulate <from> <token> <amount_raw> [denom] [bps]` —
    `eth_call`-simulates the exact calldata this crate produces. Costs
-   nothing, changes nothing on chain.
+   nothing, changes nothing on chain. `sherwood serve` exposes the same
+   check over HTTP as `POST /v1/dex/simulate` (operator role, v0.2.9) —
+   same logic, same boundary, just callable from the dashboard instead of a
+   terminal.
 3. If it reverts, do not proceed — investigate (a debug-trace-capable RPC would
    pin down the exact failing step; this session didn't have one available).
 4. Only sign for real once that simulation succeeds from your actual funded,

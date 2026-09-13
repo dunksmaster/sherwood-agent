@@ -393,6 +393,11 @@ impl ServerSection {
                 max_notional: self.max_session_notional,
                 max_duration: std::time::Duration::from_secs(self.max_session_duration_secs),
             },
+            // `[router]` lives in a different config section; `serve_cmd`
+            // overwrites this with `cfg.router.to_core()` after calling
+            // `to_opts()`. AMM-only here is the same default `[router]`
+            // itself falls back to.
+            router_config: sherwood_router::RouterConfig::default(),
         }
     }
 

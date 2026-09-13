@@ -10,6 +10,7 @@ sherwood-core = { path = "../core" }
 sherwood-execution = { path = "../execution" }
 sherwood-secrets = { path = "../secrets" }
 sherwood-store = { path = "../store" }
+sherwood-router = { path = "../router" }
 async-trait.workspace = true
 axum = { version = "0.8", default-features = false, features = [
     "http1",
