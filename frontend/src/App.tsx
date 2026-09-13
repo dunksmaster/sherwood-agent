@@ -18,7 +18,9 @@ function Login({ onSubmit }: { onSubmit: (t: string) => void }) {
     <div className="wrap login">
       <div className="card">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true" />
+          <span className="brand-mark" aria-hidden="true">
+            &gt;
+          </span>
           <h1>sherwood</h1>
         </div>
         <p className="muted">

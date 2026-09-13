@@ -73,12 +73,6 @@ export function ActivityList({
   return (
     <div className="card">
       <h2>
-        <svg viewBox="0 0 16 16" className="h2-icon" aria-hidden="true">
-          <path
-            fill="currentColor"
-            d="M8 1a7 7 0 1 0 7 7 .75.75 0 0 0-1.5 0A5.5 5.5 0 1 1 8 2.5a.75.75 0 0 0 0-1.5Zm0 3a.75.75 0 0 1 .75.75v3.19l2.03 2.03a.75.75 0 1 1-1.06 1.06l-2.25-2.25A.75.75 0 0 1 7.25 8V4.75A.75.75 0 0 1 8 4Z"
-          />
-        </svg>
         Activity
         {audit &&
           (audit.ok ? (

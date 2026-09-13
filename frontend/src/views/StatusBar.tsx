@@ -12,7 +12,9 @@ export function StatusBar({ health }: { health: Health | null }) {
   return (
     <div className="topbar" data-mode={mode}>
       <div className="brand">
-        <span className="brand-mark" aria-hidden="true" />
+        <span className="brand-mark" aria-hidden="true">
+          &gt;
+        </span>
         <h1>
           sherwood <span className="dim">control plane</span>
         </h1>
