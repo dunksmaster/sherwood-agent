@@ -186,15 +186,24 @@ is v0.2.
   generated OpenAPI ([why](docs/DECISIONS.md#2026-09-04)).
 - **Remaining for release (S16):** `git tag -a v0.1.0` + push + a GitHub release. Prepped:
   release notes, the CHANGELOG `[0.1.0]` section, SBOM in CI.
-- **Deferred to v0.2:** the Robinhood MCP adapter + OAuth + reconciliation + session
-  reconnection (S7.4–S8); the cron scheduler / live-feed monitors (S12b); A/B backtest
-  (S14b); Solana modules.
+
+**v0.2 (Robinhood Chain) — in progress, v0.2.0–v0.2.10 done.** v0.1's "Deferred to v0.2"
+line re-targeted early: the live venue is Robinhood Chain (an EVM L2), not the Agentic MCP
+([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)), and broadcasting a signed transaction
+is permanently out of scope for this codebase, not deferred
+([ADR-0007](docs/adr/0007-no-broadcast-capability.md)). Landed so far: a read-only EVM
+client and Uniswap v4 pool reads (`sherwood-chain`); a live price feed off the chain; a
+local signer and a multi-wallet registry (still no broadcast method anywhere); swap
+calldata construction + simulation (`sherwood-dex`, `sherwood dex-simulate`); AMM/RFQ
+venue routing (`sherwood-router`); a live pre-flight gate before arming Live mode; runner
+integration logging which wallet/venue a paper fill would have used; and order
+reconciliation against an already-broadcast tx hash (`sherwood-reconcile`), exposed over
+`sherwood serve` as `POST /v1/route`, `POST /v1/dex/simulate`, and `POST /v1/reconcile`.
+`sherwood run`/`sherwood serve` still cannot move funds under any config. Full step-by-step
+detail: [`docs/ROADMAP.md`](docs/ROADMAP.md#v02--robinhood-chain-evm).
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Component-by-component audit:
 [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
-
-Once a dashboard exists, this README will grow a screenshot-driven walkthrough of each
-feature. It does not have one yet because there is nothing to show.
 
 ## Operator boundary
 

@@ -10,6 +10,8 @@ config.toml
 *.key
 wallet*.json
 keypair*.json
+*.vault
+*passphrase*
 
 # logs / state
 *.log
