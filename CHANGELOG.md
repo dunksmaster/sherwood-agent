@@ -203,6 +203,18 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   2026-09-13 decision to keep those out of it. Pure refactor: all 19 existing config tests
   moved and pass unchanged; verified live with `sherwood check config.toml` and
   `sherwood serve config.toml` against a real vault, confirming no behavior change.
+- **Config editor: `GET`/`POST /v1/config` (v0.2.13).** `sherwood-server` gains `GET
+  /v1/config` (admin, the exact current `config.toml` text) and `POST /v1/config` (admin +
+  body re-auth: validates a full replacement file with `sherwood-config`'s `AppConfig::
+  validate` before writing anything, then applies it exactly like `POST /v1/config/reload`).
+  Works on raw TOML text, not a parsed-and-reserialized struct, so a human-edited file's
+  comments and formatting survive a read-modify-write cycle. Writes atomically (temp file +
+  rename). `sherwood-cli::config_store::FileConfigStore` is the concrete implementation. 7
+  new `sherwood-server` route tests. Verified live: posting a config with `mode = "live"`
+  is rejected with `422` and leaves the file untouched; posting a real `approval_mode`
+  change writes it to disk, applies it to the running server (confirmed via `GET
+  /v1/approvals` immediately reflecting the new mode), and reads back correctly through
+  `GET /v1/config`.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

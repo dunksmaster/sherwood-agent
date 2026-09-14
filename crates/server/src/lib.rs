@@ -28,6 +28,8 @@
 //! | POST | `/v1/route` | operator | which venue (AMM/RFQ) an order of this notional would use |
 //! | POST | `/v1/dex/simulate` | operator | `eth_call`-simulate a swap; signs and sends nothing |
 //! | POST | `/v1/reconcile` | operator | reconcile a tx hash the operator already broadcast |
+//! | GET  | `/v1/config` | admin | the exact current `config.toml` text |
+//! | POST | `/v1/config` | admin + body re-auth | validate + write a full replacement `config.toml`, then apply it |
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -102,6 +104,12 @@ fn build_cors(origins: &[String]) -> CorsLayer {
 pub fn router(state: AppState) -> Router {
     let cors = build_cors(&state.cors_origins);
 
+    // Bound separately: rustfmt wraps a `get(...).post(...)` argument onto
+    // its own lines when inlined into `.route(...)`, which would split the
+    // path string from `.route(` across lines and break `api_doc_sync`'s
+    // line-based scan of this function.
+    let config_route = get(routes::get_config).post(routes::post_config);
+
     let protected = Router::new()
         .route("/v1/control", get(routes::get_control))
         .route("/v1/portfolio", get(routes::get_portfolio))
@@ -119,6 +127,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/route", post(routes::post_route))
         .route("/v1/dex/simulate", post(routes::post_dex_simulate))
         .route("/v1/reconcile", post(routes::post_reconcile))
+        .route("/v1/config", config_route)
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
     let mut app = Router::new()
@@ -1323,5 +1332,178 @@ mod tests {
         .await;
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
         assert!(body_string(resp).await.contains("rpc unreachable"));
+    }
+
+    /// A stub `ConfigStore` for tests: starts holding `initial`, records
+    /// every `write` so a test can assert whether one happened.
+    struct StubConfigStore {
+        contents: std::sync::Mutex<String>,
+    }
+
+    impl StubConfigStore {
+        fn new(initial: &str) -> Self {
+            Self {
+                contents: std::sync::Mutex::new(initial.to_owned()),
+            }
+        }
+    }
+
+    use state::ConfigStore as _;
+
+    impl state::ConfigStore for StubConfigStore {
+        fn read(&self) -> Result<String, String> {
+            Ok(self.contents.lock().unwrap().clone())
+        }
+
+        fn write(&self, contents: &str) -> Result<(), String> {
+            *self.contents.lock().unwrap() = contents.to_owned();
+            Ok(())
+        }
+    }
+
+    /// A minimal config the bundled runner accepts: paper mode, a loopback
+    /// bind, vault-reference tokens — the fields `AppConfig::validate`
+    /// actually checks.
+    const VALID_CONFIG_TOML: &str = r#"
+[general]
+starting_cash = 1000
+mode = "paper"
+decider = "rule"
+
+[server]
+bind = "127.0.0.1:8787"
+token_ref = "vault:api_token"
+approval_mode = "manual"
+"#;
+
+    #[tokio::test]
+    async fn get_config_404s_when_not_configured() {
+        let resp = call(test_state(), get_as("/v1/config", ADMIN)).await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn get_config_requires_admin_role() {
+        let state = test_state().with_config_store(Arc::new(StubConfigStore::new("stub = true")));
+        let resp = call(state, get_as("/v1/config", OPERATOR)).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn get_config_returns_the_stored_text_verbatim() {
+        let state = test_state().with_config_store(Arc::new(StubConfigStore::new("stub = true")));
+        let resp = call(state, get_as("/v1/config", ADMIN)).await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("stub = true"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn post_config_needs_admin_reauth_and_a_configured_store() {
+        // No config store configured -> 404.
+        let r = call(
+            test_state(),
+            post(
+                "/v1/config",
+                Some(ADMIN),
+                serde_json::json!({ "toml": VALID_CONFIG_TOML, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::NOT_FOUND);
+
+        let store = Arc::new(StubConfigStore::new("stub = true"));
+
+        // Viewer role -> 403.
+        let r = call(
+            test_state().with_config_store(store.clone()),
+            post(
+                "/v1/config",
+                Some(VIEWER),
+                serde_json::json!({ "toml": VALID_CONFIG_TOML, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+
+        // Wrong body re-auth -> 403.
+        let r = call(
+            test_state().with_config_store(store),
+            post(
+                "/v1/config",
+                Some(ADMIN),
+                serde_json::json!({ "toml": VALID_CONFIG_TOML, "reauth": "nope" }),
+            ),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn post_config_rejects_unparseable_toml_without_writing() {
+        let store = Arc::new(StubConfigStore::new("stub = true"));
+        let state = test_state().with_config_store(store.clone());
+        let resp = call(
+            state,
+            post(
+                "/v1/config",
+                Some(ADMIN),
+                serde_json::json!({ "toml": "this is not [ valid toml", "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(store.read().unwrap(), "stub = true"); // untouched
+    }
+
+    #[tokio::test]
+    async fn post_config_rejects_a_config_that_fails_validate_without_writing() {
+        let store = Arc::new(StubConfigStore::new("stub = true"));
+        let state = test_state().with_config_store(store.clone());
+        // Parses fine as TOML, but `general.mode = "live"` fails `validate`.
+        let resp = call(
+            state,
+            post(
+                "/v1/config",
+                Some(ADMIN),
+                serde_json::json!({
+                    "toml": "[general]\nstarting_cash = 1000\nmode = \"live\"\ndecider = \"rule\"\n",
+                    "reauth": ADMIN
+                }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(store.read().unwrap(), "stub = true"); // untouched
+    }
+
+    #[tokio::test]
+    async fn post_config_writes_and_reloads_on_success() {
+        use crate::state::Reloaded;
+        let store = Arc::new(StubConfigStore::new("stub = true"));
+        let state = state_with(ServerOpts::default())
+            .with_config_store(store.clone())
+            .with_reloader(Arc::new(|| {
+                Ok(Reloaded {
+                    risk: RiskGate::new(RiskConfig::default()),
+                    allowlist: ToolAllowlist::new(),
+                    approval_mode: crate::approvals::ApprovalMode::Manual,
+                })
+            }));
+
+        let resp = call(
+            state,
+            post(
+                "/v1/config",
+                Some(ADMIN),
+                serde_json::json!({ "toml": VALID_CONFIG_TOML, "reauth": ADMIN }),
+            ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"written\":true"), "{body}");
+        assert!(body.contains("\"reloaded\":true"), "{body}");
+        assert_eq!(store.read().unwrap(), VALID_CONFIG_TOML);
     }
 }

@@ -152,6 +152,13 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
         rpc_url: cfg.chain.rpc_url.clone(),
     });
 
+    // `GET`/`POST /v1/config` (v0.2.13): read/write the same file --
+    // config.toml -- this process itself loaded. Wired unconditionally --
+    // `AppConfig::validate` gates every write before it touches disk.
+    let config_store = Arc::new(crate::config_store::FileConfigStore {
+        path: cfg_path.clone(),
+    });
+
     let mut opts = cfg.server.to_opts();
     opts.router_config = cfg.router.to_core();
 
@@ -165,7 +172,8 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
     .with_reloader(reloader)
     .with_live_preflight(live_preflight)
     .with_dex_simulator(dex_simulator)
-    .with_reconciler(reconciler);
+    .with_reconciler(reconciler)
+    .with_config_store(config_store);
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {

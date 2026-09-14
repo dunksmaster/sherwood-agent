@@ -13,6 +13,7 @@ mod chain_cmd;
 mod chain_price_cmd;
 mod config;
 mod config_ext;
+mod config_store;
 mod dex_preview;
 mod dex_simulate_cmd;
 mod feed;
