@@ -184,6 +184,14 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   state with real `block_number`/`gas_used`, the no-snapshot-yet path, and — after seeding a
   snapshot with `sherwood run` — the fill actually landing in `GET /v1/portfolio` (cash
   983.61 → 783.11, a new 1 NVDA position at avg_cost 200) exactly as a paper fill would.
+- **Cash-over-time dashboard view (v0.2.11).** `frontend/` gains `CashCurve`, a
+  dependency-free inline-SVG sparkline card. Reconstructs a cash series client-side by
+  walking the fills already present in the activity feed and anchoring to the live
+  `/v1/portfolio` cash figure — no new endpoint, no backend change. Deliberately labelled
+  "cash over time," not "equity": there is no mark-to-market, and the series only covers
+  whatever window `/v1/activity` has fetched, not full history. Verified in the browser
+  against a real local run (`sherwood run`): the chart correctly shows two dips (buys) and
+  recovery (stop-loss sells), colour-coded green/red by net direction over the window.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**
