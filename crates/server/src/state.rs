@@ -181,6 +181,21 @@ pub trait Reconciler: Send + Sync {
     async fn reconcile(&self, req: ReconcileRequest) -> Result<ReconcileOutcome, String>;
 }
 
+/// Reads and writes the raw `config.toml` text for `GET`/`POST /v1/config`
+/// (v0.2.13). Kept to raw text rather than a parsed `AppConfig` round-trip so
+/// a human-edited file's comments and formatting survive a read-modify-write
+/// cycle through the API — re-serialising a parsed struct would silently
+/// strip them. `sherwood serve` wires a real implementation
+/// (`sherwood_cli::config_store::FileConfigStore`); `None` on [`AppState`]
+/// just means the feature isn't configured on this server.
+pub trait ConfigStore: Send + Sync {
+    fn read(&self) -> Result<String, String>;
+    /// Writes `contents` verbatim. Implementations should write atomically
+    /// (temp file + rename) so a crash mid-write can't corrupt the file the
+    /// running server still reads on its next restart.
+    fn write(&self, contents: &str) -> Result<(), String>;
+}
+
 /// Knobs that come from `[server]` config.
 #[derive(Debug, Clone)]
 pub struct ServerOpts {
@@ -255,6 +270,9 @@ pub struct AppState {
     /// Backs `POST /v1/reconcile`. `None` = not wired up on this server —
     /// the route reports that plainly, not a `500`.
     pub reconciler: Option<Arc<dyn Reconciler>>,
+    /// Backs `GET`/`POST /v1/config`. `None` = config editing is unavailable
+    /// on this server — the route reports that plainly, not a `500`.
+    pub config_store: Option<Arc<dyn ConfigStore>>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -287,6 +305,7 @@ impl AppState {
             router_config: opts.router_config,
             dex_simulator: None,
             reconciler: None,
+            config_store: None,
             started_at: Utc::now(),
         }
     }
@@ -312,6 +331,12 @@ impl AppState {
     #[must_use]
     pub fn with_reconciler(mut self, reconciler: Arc<dyn Reconciler>) -> Self {
         self.reconciler = Some(reconciler);
+        self
+    }
+
+    #[must_use]
+    pub fn with_config_store(mut self, store: Arc<dyn ConfigStore>) -> Self {
+        self.config_store = Some(store);
         self
     }
 

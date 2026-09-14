@@ -11,10 +11,11 @@ sherwood-execution = { path = "../execution" }
 sherwood-secrets = { path = "../secrets" }
 sherwood-store = { path = "../store" }
 sherwood-router = { path = "../router" }
-# Unused today — proves the extraction (v0.2.12) actually broke the cycle.
-# Phase 3 (the config-editor endpoint) is what uses this.
+# Added inert in v0.2.12 to prove the extraction broke the cycle; now used by
+# GET/POST /v1/config (v0.2.13) to validate a posted config.toml.
 sherwood-config = { path = "../config" }
 async-trait.workspace = true
+toml.workspace = true
 axum = { version = "0.8", default-features = false, features = [
     "http1",
     "json",

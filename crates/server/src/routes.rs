@@ -678,19 +678,14 @@ pub struct ReloadView {
     note: &'static str,
 }
 
-/// `POST /v1/config/reload` — re-read `config.toml` and swap in the new
-/// `[risk]` config, `[hook]` allowlist, and `approval_mode` under one lock.
-/// The runtime kill switch is preserved: a reload can *engage* it (if the file
-/// says so) but never dis-engage one an admin set. Everything else — `bind`,
-/// tokens, CORS, `static_dir`, the session-budget caps — needs a restart.
-pub async fn post_config_reload(
-    State(state): State<AppState>,
-    caller: Caller,
-    Json(req): Json<ReloadRequest>,
-) -> ApiResult<Json<ReloadView>> {
-    caller.require(Role::Admin)?;
-    check_reauth(&state, &req.reauth)?;
-
+/// Re-reads `config.toml` via `state.reloader` and swaps in the runtime-
+/// reloadable subset (`[risk]`, `[hook]` allowlist, `approval_mode`) under one
+/// lock. The runtime kill switch is preserved: this can *engage* it (if the
+/// file says so) but never dis-engage one an admin set. Everything else —
+/// `bind`, tokens, CORS, `static_dir`, the session-budget caps — needs a
+/// restart. Shared by `POST /v1/config/reload` and `POST /v1/config`: both
+/// end with "the file changed, now make the running server match it."
+async fn apply_reload(state: &AppState) -> ApiResult<ReloadView> {
     let reloader = state
         .reloader
         .as_ref()
@@ -709,14 +704,99 @@ pub async fn post_config_reload(
     tracing::warn!(
         approval_mode = ?control.approval_mode,
         kill_switch = control.kill_switch(),
-        "config reloaded by admin"
+        "config reloaded"
     );
-    Ok(Json(ReloadView {
+    Ok(ReloadView {
         reloaded: true,
         approval_mode: control.approval_mode,
         allowlisted_tools: control.allowlist.len(),
         kill_switch: control.kill_switch(),
         note: "bind, tokens, CORS, static_dir and the session-budget caps still require a restart",
+    })
+}
+
+/// `POST /v1/config/reload` — re-read `config.toml` and apply it. See
+/// [`apply_reload`].
+pub async fn post_config_reload(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<ReloadRequest>,
+) -> ApiResult<Json<ReloadView>> {
+    caller.require(Role::Admin)?;
+    check_reauth(&state, &req.reauth)?;
+    apply_reload(&state).await.map(Json)
+}
+
+#[derive(Serialize)]
+pub struct ConfigView {
+    /// The exact current contents of `config.toml` — comments, formatting,
+    /// and all. Every secret field in `AppConfig` is a `vault:` reference,
+    /// never a literal (`AppConfig::validate` enforces that on write), so
+    /// this never returns a credential.
+    toml: String,
+}
+
+/// `GET /v1/config` — the raw text of `config.toml`, unmodified. Admin only:
+/// this is the master control surface (risk caps, tool allowlist, CORS, bind
+/// address), more revealing than any other read in this API.
+pub async fn get_config(
+    State(state): State<AppState>,
+    caller: Caller,
+) -> ApiResult<Json<ConfigView>> {
+    caller.require(Role::Admin)?;
+    let store = state
+        .config_store
+        .as_ref()
+        .ok_or_else(|| ApiError::not_found("config editing is not available for this server"))?;
+    let toml = store.read().map_err(ApiError::internal)?;
+    Ok(Json(ConfigView { toml }))
+}
+
+#[derive(Deserialize)]
+pub struct ConfigWriteRequest {
+    /// A complete replacement `config.toml` — not a patch. Validated before
+    /// anything is written; the file on disk is untouched if validation
+    /// fails.
+    pub toml: String,
+    pub reauth: String,
+}
+
+#[derive(Serialize)]
+pub struct ConfigWriteView {
+    written: bool,
+    #[serde(flatten)]
+    reload: ReloadView,
+}
+
+/// `POST /v1/config` — validate a full replacement `config.toml`, write it,
+/// then apply it the same way `POST /v1/config/reload` does (see
+/// [`apply_reload`]). Rejects anything `AppConfig::validate` would reject
+/// without touching the file.
+pub async fn post_config(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<ConfigWriteRequest>,
+) -> ApiResult<Json<ConfigWriteView>> {
+    caller.require(Role::Admin)?;
+    check_reauth(&state, &req.reauth)?;
+
+    let store = state
+        .config_store
+        .as_ref()
+        .ok_or_else(|| ApiError::not_found("config editing is not available for this server"))?;
+
+    let parsed: sherwood_config::AppConfig = toml::from_str(&req.toml)
+        .map_err(|e| ApiError::bad_request(format!("invalid TOML: {e}")))?;
+    parsed
+        .validate()
+        .map_err(|e| ApiError::unprocessable(format!("invalid config: {e}")))?;
+
+    store.write(&req.toml).map_err(ApiError::internal)?;
+
+    let reload = apply_reload(&state).await?;
+    Ok(Json(ConfigWriteView {
+        written: true,
+        reload,
     }))
 }
 
