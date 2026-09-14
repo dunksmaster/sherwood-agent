@@ -23,6 +23,7 @@ sherwood-wallets = { path = "../wallets" }
 sherwood-dex = { path = "../dex" }
 sherwood-router = { path = "../router" }
 sherwood-reconcile = { path = "../reconcile" }
+sherwood-config = { path = "../config" }
 async-trait.workspace = true
 sherwood-server = { path = "../server" }
 sherwood-copytrade = { path = "../copytrade" }

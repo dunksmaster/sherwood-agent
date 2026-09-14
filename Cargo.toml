@@ -15,6 +15,7 @@ members = [
     "crates/dex",
     "crates/router",
     "crates/reconcile",
+    "crates/config",
     "crates/server",
     "crates/cli",
 ]

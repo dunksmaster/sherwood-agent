@@ -192,6 +192,17 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   whatever window `/v1/activity` has fetched, not full history. Verified in the browser
   against a real local run (`sherwood run`): the chart correctly shows two dips (buys) and
   recovery (stop-loss sells), colour-coded green/red by net direction over the window.
+- **`sherwood-config` extraction (v0.2.12).** `AppConfig` and every `*Section` struct moved
+  out of `sherwood-cli` into a new crate, so `sherwood-server` can depend on the same config
+  types (needed for the config-editor endpoint) without a `server -> config -> server` cycle.
+  Deliberately dependency-light: only `sherwood-core`, `sherwood-execution`, and
+  `sherwood-router` (none of which depend on `cli`/`server`/`config`). `ServerSection::
+  to_opts()` and `WalletEntry::to_core()` stayed in `sherwood-cli::config_ext` instead — the
+  first would have recreated the cycle, the second would have transitively pulled
+  `sherwood-wallets`' vault/signer dependencies into the server process, undoing the
+  2026-09-13 decision to keep those out of it. Pure refactor: all 19 existing config tests
+  moved and pass unchanged; verified live with `sherwood check config.toml` and
+  `sherwood serve config.toml` against a real vault, confirming no behavior change.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

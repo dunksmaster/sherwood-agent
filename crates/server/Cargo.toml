@@ -11,6 +11,9 @@ sherwood-execution = { path = "../execution" }
 sherwood-secrets = { path = "../secrets" }
 sherwood-store = { path = "../store" }
 sherwood-router = { path = "../router" }
+# Unused today — proves the extraction (v0.2.12) actually broke the cycle.
+# Phase 3 (the config-editor endpoint) is what uses this.
+sherwood-config = { path = "../config" }
 async-trait.workspace = true
 axum = { version = "0.8", default-features = false, features = [
     "http1",
