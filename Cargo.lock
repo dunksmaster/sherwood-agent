@@ -1920,6 +1920,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sherwood-chain",
+ "sherwood-config",
  "sherwood-copytrade",
  "sherwood-core",
  "sherwood-decision",
@@ -1940,6 +1941,20 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sherwood-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "sherwood-core",
+ "sherwood-execution",
+ "sherwood-router",
+ "toml",
 ]
 
 [[package]]
@@ -2081,6 +2096,7 @@ dependencies = [
  "rust_decimal_macros",
  "serde",
  "serde_json",
+ "sherwood-config",
  "sherwood-core",
  "sherwood-execution",
  "sherwood-router",

@@ -1,0 +1,35 @@
+[package]
+name = "sherwood-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# TOML config loading and validation for sherwood-agent (v0.2.12). Pure data +
+# validation only — deliberately no `sherwood-*` dependency, so both
+# sherwood-cli and sherwood-server can depend on it without a cycle. Anything
+# that converts a section into another crate's type (`to_core()`, `to_opts()`,
+# `to_allowlist()`) stays in sherwood-cli, which is the only thing that needs
+# it. See the crate README for the boundary this was extracted along.
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+toml.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+sherwood-core = { path = "../core" }
+sherwood-execution = { path = "../execution" }
+sherwood-router = { path = "../router" }
+
+# Deliberately NOT a dependency: sherwood-server (ServerSection::to_opts()
+# returns its ServerOpts — moving it here would recreate the cycle this crate
+# exists to break) or sherwood-wallets (WalletEntry::to_core() is cycle-safe
+# on paper, but sherwood-wallets pulls in sherwood-secrets/sherwood-signer,
+# and this crate is meant to be depended on by sherwood-server — the
+# 2026-09-13 decision to keep vault/signer code out of the server process
+# would otherwise be undone transitively). Both conversions stay in
+# sherwood-cli. See the crate README.
+
+[lints]
+workspace = true

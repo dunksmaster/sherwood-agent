@@ -5,6 +5,7 @@
 //! reports; see `sherwood-wallets` and `sherwood-signer`.
 
 use crate::config::AppConfig;
+use crate::config_ext::WalletEntryExt;
 use crate::secrets_cmd::open_vault;
 use anyhow::{Context, Result};
 use sherwood_wallets::WalletRegistry;
@@ -15,11 +16,7 @@ pub fn run(cfg: &AppConfig) -> Result<()> {
         return Ok(());
     }
     let vault = open_vault()?;
-    let configs: Vec<_> = cfg
-        .wallets
-        .iter()
-        .map(crate::config::WalletEntry::to_core)
-        .collect();
+    let configs: Vec<_> = cfg.wallets.iter().map(WalletEntryExt::to_core).collect();
     let registry = WalletRegistry::load(&configs, &vault).context("loading the wallet registry")?;
 
     let mut names: Vec<&str> = registry.names().collect();

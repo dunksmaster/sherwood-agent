@@ -5,6 +5,7 @@
 //! serves until Ctrl-C.
 
 use crate::config::AppConfig;
+use crate::config_ext::ServerSectionExt;
 use crate::dex_preview::ChainDexSimulator;
 use crate::live_preflight::{preflight_tokens, ChainLivePreflight};
 use crate::reconcile_preview::ChainReconciler;

@@ -12,6 +12,7 @@
 //! directly â€” the loop owns that state.
 
 use crate::config::AppConfig;
+use crate::config_ext::WalletEntryExt;
 use crate::feed::{CsvFeed, SliceFeed};
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Duration, Utc};
@@ -138,11 +139,7 @@ impl LivePreview {
         }
         let vault = crate::secrets_cmd::open_vault()
             .context("opening the vault to resolve [[wallets]] key_ref")?;
-        let configs: Vec<_> = cfg
-            .wallets
-            .iter()
-            .map(crate::config::WalletEntry::to_core)
-            .collect();
+        let configs: Vec<_> = cfg.wallets.iter().map(WalletEntryExt::to_core).collect();
         let wallets = sherwood_wallets::WalletRegistry::load(&configs, &vault)
             .context("loading [[wallets]]")?;
         let router = sherwood_router::Router::new(cfg.router.to_core())
