@@ -6,7 +6,7 @@ use crate::budget::{BudgetCaps, SessionBudget};
 use crate::limit::RateLimiter;
 use crate::metrics::Metrics;
 use chrono::{DateTime, Utc};
-use sherwood_core::RiskGate;
+use sherwood_core::{Fill, RiskGate};
 use sherwood_execution::ToolAllowlist;
 use sherwood_store::SqliteStore;
 use std::sync::Arc;
@@ -133,6 +133,54 @@ pub trait DexSimulator: Send + Sync {
     async fn simulate(&self, req: DexSimulateRequest) -> Result<DexSimulateOutcome, String>;
 }
 
+/// `POST /v1/reconcile` input — the same arguments `sherwood reconcile` takes
+/// on the command line.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ReconcileRequest {
+    /// A transaction hash the operator already obtained by broadcasting
+    /// with their own tooling — see
+    /// [ADR-0007](../../../docs/adr/0007-no-broadcast-capability.md).
+    pub tx_hash: String,
+    pub symbol: String,
+    /// `"buy"` or `"sell"`.
+    pub side: String,
+    pub qty: rust_decimal::Decimal,
+    pub price: rust_decimal::Decimal,
+    #[serde(default)]
+    pub fee: Option<rust_decimal::Decimal>,
+}
+
+/// What reconciling a transaction hash found. Mirrors
+/// `sherwood_reconcile::Outcome`, translated to plain data by whatever
+/// implements [`Reconciler`] — this crate does not depend on
+/// `sherwood-reconcile` itself, same as [`DexSimulateOutcome`] not
+/// depending on `sherwood-dex`.
+#[derive(Debug, Clone)]
+pub enum ReconcileOutcome {
+    /// No receipt yet — still pending, or the hash is unknown to this node.
+    NotFound,
+    /// Mined, but reverted. Gas was spent; nothing to record.
+    Reverted { block_number: u64, gas_used: u64 },
+    /// Mined and succeeded. `fill` is ready to record against the
+    /// persisted portfolio, exactly like a paper fill.
+    Confirmed {
+        block_number: u64,
+        gas_used: u64,
+        fill: Fill,
+    },
+}
+
+/// Runs [`ReconcileRequest`] against the live chain: reads a receipt only
+/// (never sends anything, has no signer) and labels the outcome against the
+/// trade the operator expected. `sherwood serve` wires a real
+/// implementation (`sherwood_cli::reconcile_preview::ChainReconciler`);
+/// `None` on [`AppState`] just means the feature isn't configured on this
+/// server.
+#[async_trait::async_trait]
+pub trait Reconciler: Send + Sync {
+    async fn reconcile(&self, req: ReconcileRequest) -> Result<ReconcileOutcome, String>;
+}
+
 /// Knobs that come from `[server]` config.
 #[derive(Debug, Clone)]
 pub struct ServerOpts {
@@ -204,6 +252,9 @@ pub struct AppState {
     /// (e.g. tests, or a `sherwood serve` invocation with no `[chain]`
     /// endpoint) — the route reports that plainly, not a `500`.
     pub dex_simulator: Option<Arc<dyn DexSimulator>>,
+    /// Backs `POST /v1/reconcile`. `None` = not wired up on this server —
+    /// the route reports that plainly, not a `500`.
+    pub reconciler: Option<Arc<dyn Reconciler>>,
     pub started_at: DateTime<Utc>,
 }
 
@@ -235,6 +286,7 @@ impl AppState {
             live_preflight: None,
             router_config: opts.router_config,
             dex_simulator: None,
+            reconciler: None,
             started_at: Utc::now(),
         }
     }
@@ -254,6 +306,12 @@ impl AppState {
     #[must_use]
     pub fn with_dex_simulator(mut self, simulator: Arc<dyn DexSimulator>) -> Self {
         self.dex_simulator = Some(simulator);
+        self
+    }
+
+    #[must_use]
+    pub fn with_reconciler(mut self, reconciler: Arc<dyn Reconciler>) -> Self {
+        self.reconciler = Some(reconciler);
         self
     }
 

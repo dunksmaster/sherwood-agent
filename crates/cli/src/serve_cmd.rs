@@ -7,6 +7,7 @@
 use crate::config::AppConfig;
 use crate::dex_preview::ChainDexSimulator;
 use crate::live_preflight::{preflight_tokens, ChainLivePreflight};
+use crate::reconcile_preview::ChainReconciler;
 use crate::secrets_cmd;
 use anyhow::{anyhow, Context, Result};
 use sherwood_core::RiskGate;
@@ -143,6 +144,13 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
         rpc_url: cfg.chain.rpc_url.clone(),
     });
 
+    // `POST /v1/reconcile` (v0.2.10): reads a receipt for a tx hash the
+    // operator already broadcast. Same boundary as the CLI's `sherwood
+    // reconcile` — no signer, sends nothing.
+    let reconciler = Arc::new(ChainReconciler {
+        rpc_url: cfg.chain.rpc_url.clone(),
+    });
+
     let mut opts = cfg.server.to_opts();
     opts.router_config = cfg.router.to_core();
 
@@ -155,7 +163,8 @@ pub async fn run(cfg: AppConfig, cfg_path: PathBuf, shutdown: Arc<AtomicBool>) -
     )
     .with_reloader(reloader)
     .with_live_preflight(live_preflight)
-    .with_dex_simulator(dex_simulator);
+    .with_dex_simulator(dex_simulator)
+    .with_reconciler(reconciler);
 
     let flag = Arc::clone(&shutdown);
     let shutdown_fut = async move {
