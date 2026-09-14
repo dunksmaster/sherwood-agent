@@ -145,7 +145,7 @@ async fn decide_with_provider(
     if cfg.max_calls_per_run > 0 && calls.load(Ordering::Relaxed) >= cfg.max_calls_per_run {
         return hold("ai call budget exhausted for this run");
     }
-    if looks_like_injection(symbol) || symbol.len() > 32 {
+    if looks_like_injection(symbol) || (symbol.len() > 32 && !looks_like_chain_address(symbol)) {
         tracing::warn!(%symbol, "ai: untrusted field looks adversarial — holding");
         return hold("untrusted input flagged; holding");
     }
@@ -285,6 +285,15 @@ fn strip_fences(text: &str) -> &str {
         .or_else(|| t.strip_prefix("```"))
         .unwrap_or(t);
     t.strip_suffix("```").unwrap_or(t).trim()
+}
+
+/// `sherwood_chain::tokens::resolve` passes an unrecognized token straight
+/// through as its own address string when it has no `KNOWN_TOKENS` entry —
+/// a legitimate 42-char value, not adversarial text. The 32-char cap below
+/// predates that (it was sized for ticker-style symbols); this carves out
+/// the one shape it would otherwise always reject.
+fn looks_like_chain_address(s: &str) -> bool {
+    s.len() == 42 && s.starts_with("0x") && s[2..].chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn looks_like_injection(s: &str) -> bool {
@@ -472,6 +481,25 @@ mod tests {
             decide(p, cfg, &ctx("HMNI")).await,
             Decision::Hold { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn a_raw_chain_address_is_not_treated_as_injection() {
+        let p = MockProvider::ok(&[r#"{"action":"hold","reason":"no signal"}"#]);
+        let d = decide(
+            p,
+            AiConfig::default(),
+            &ctx("0xd0601CE157Db5bdC3162BbaC2a2C8aF5320D9EEC"),
+        )
+        .await;
+        assert!(matches!(d, Decision::Hold { reason } if reason == "no signal"));
+    }
+
+    #[tokio::test]
+    async fn a_too_long_non_address_string_is_still_flagged() {
+        let p = MockProvider::ok(&[r#"{"action":"buy","fraction":1}"#]);
+        let d = decide(p, AiConfig::default(), &ctx(&"A".repeat(40))).await;
+        assert!(matches!(d, Decision::Hold { reason } if reason.contains("untrusted")));
     }
 
     #[test]
