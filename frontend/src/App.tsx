@@ -5,6 +5,7 @@ import { usePoll } from "./hooks/usePoll.ts";
 import { useAuditStream } from "./hooks/useAuditStream.ts";
 import { StatusBar } from "./views/StatusBar.tsx";
 import { PortfolioCard } from "./views/PortfolioCard.tsx";
+import { CashCurve } from "./views/CashCurve.tsx";
 import { ActivityList } from "./views/ActivityList.tsx";
 import { ApprovalsCard } from "./views/ApprovalsCard.tsx";
 import { Controls } from "./views/Controls.tsx";
@@ -96,6 +97,14 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             error={approvals.error}
             token={token}
             onDecided={approvals.refresh}
+          />
+        </div>
+        <div className="area-curve">
+          <CashCurve
+            events={events}
+            data={activity.data}
+            portfolio={portfolio.data}
+            error={activity.error ?? portfolio.error}
           />
         </div>
         <div className="area-activity">
