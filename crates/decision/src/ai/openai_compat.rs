@@ -8,6 +8,11 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+/// A backstop against a misconfigured or misbehaving provider declaring a
+/// huge `Content-Length` — see the check in `complete` for what this does
+/// and does not guarantee.
+const MAX_RESPONSE_BYTES: u64 = 1 << 20; // 1 MiB
+
 /// Talks to a `POST {base_url}/chat/completions` endpoint with a bearer token.
 pub struct OpenAiCompatProvider {
     client: reqwest::Client,
@@ -110,6 +115,19 @@ impl AiProvider for OpenAiCompatProvider {
                     AiError::Transport(e.to_string())
                 }
             })?;
+
+        // A chat completion is tiny (`max_tokens` bounds it); a provider that
+        // declares far more than that is either misconfigured or misbehaving.
+        // This is a fast-fail on a truthful Content-Length, not a hard cap —
+        // a response that omits or lies about it still relies on the
+        // whole-round-trip `request_timeout` above to bound exposure.
+        if let Some(len) = resp.content_length() {
+            if len > MAX_RESPONSE_BYTES {
+                return Err(AiError::Transport(format!(
+                    "response declared {len} bytes, over the {MAX_RESPONSE_BYTES}-byte cap"
+                )));
+            }
+        }
 
         let status = resp.status();
         if !status.is_success() {
