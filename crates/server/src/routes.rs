@@ -19,6 +19,7 @@
 //! | `POST` | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
 //! | `POST` | `/v1/route` | operator | which venue (AMM/RFQ) an order of this notional would use |
 //! | `POST` | `/v1/dex/simulate` | operator | `eth_call`-simulate a swap; signs and sends nothing |
+//! | `POST` | `/v1/reconcile` | operator | reconcile a tx hash the operator already broadcast; reads a receipt, records a confirmed fill |
 //!
 //! A *denied* tool call is a `200` with `{"decision":"deny",…}` — the caller
 //! (the agent's `PreToolUse` hook script) maps the body onto the CLI's
@@ -35,7 +36,7 @@ use axum::Json;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use sherwood_core::{Asset, GateContext, Portfolio};
+use sherwood_core::{Asset, Fill, GateContext, Portfolio, Side};
 use sherwood_execution::order_parse::parse_order;
 use sherwood_execution::{HookGate, HookOutcome, ToolCall, ToolClass};
 use sherwood_store::{AuditEvent, AuditVerification, SqliteStore, Store};
@@ -51,7 +52,7 @@ use tokio_stream::{Stream, StreamExt};
 
 use crate::auth::{Caller, Role};
 use crate::error::{ApiError, ApiResult};
-use crate::state::{AppState, DexSimulateRequest, Mode};
+use crate::state::{AppState, DexSimulateRequest, Mode, ReconcileOutcome, ReconcileRequest};
 
 fn store(state: &AppState) -> ApiResult<&SqliteStore> {
     state
@@ -391,6 +392,136 @@ pub async fn post_dex_simulate(
         .await
         .map_err(ApiError::bad_request)?;
     Ok(Json(outcome))
+}
+
+fn side_str(s: Side) -> &'static str {
+    match s {
+        Side::Buy => "buy",
+        Side::Sell => "sell",
+    }
+}
+
+#[derive(Serialize)]
+pub struct ReconcileView {
+    /// `"not_found"`, `"reverted"`, or `"confirmed"`.
+    pub status: &'static str,
+    pub block_number: Option<u64>,
+    pub gas_used: Option<u64>,
+    /// Whether a confirmed fill was written to the state store. Always
+    /// `false` for `not_found`/`reverted` — there's nothing to record.
+    pub recorded: bool,
+    pub note: Option<String>,
+}
+
+/// Records a confirmed reconciled fill exactly like a paper fill: appended
+/// fill, updated portfolio snapshot, audit-chain row. `Ok(false)` (not an
+/// error) when there's no portfolio snapshot yet to apply it to — this
+/// route does not bootstrap one; `sherwood reconcile` on the CLI can.
+async fn record_reconciled_fill(store: &SqliteStore, fill: &Fill) -> ApiResult<bool> {
+    let mut portfolio = match store
+        .load_portfolio()
+        .await
+        .map_err(|e| ApiError::internal(format!("loading the portfolio: {e}")))?
+    {
+        Some(p) => p,
+        None => return Ok(false),
+    };
+    store
+        .append_fill(fill)
+        .await
+        .map_err(|e| ApiError::internal(format!("appending fill: {e}")))?;
+    portfolio.apply(fill);
+    store
+        .save_portfolio(&portfolio)
+        .await
+        .map_err(|e| ApiError::internal(format!("saving the portfolio: {e}")))?;
+    store
+        .append_audit(
+            "fill",
+            serde_json::json!({
+                "order_id": fill.order_id.0,
+                "symbol": fill.asset.symbol,
+                "side": side_str(fill.side),
+                "qty": fill.qty.to_string(),
+                "price": fill.price.to_string(),
+                "fee": fill.fee.to_string(),
+                "source": "reconcile",
+            }),
+        )
+        .await
+        .map_err(|e| ApiError::internal(format!("appending the audit row: {e}")))?;
+    Ok(true)
+}
+
+/// Reconcile a transaction hash the operator already broadcast with their
+/// own tooling — see [ADR-0007](../../../docs/adr/0007-no-broadcast-capability.md).
+/// Reads a receipt only (never sends anything); on success, records the
+/// fill the same way `sherwood reconcile` does.
+pub async fn post_reconcile(
+    State(state): State<AppState>,
+    caller: Caller,
+    Json(req): Json<ReconcileRequest>,
+) -> ApiResult<Json<ReconcileView>> {
+    caller.require(Role::Operator)?;
+
+    let reconciler = state.reconciler.as_ref().ok_or_else(|| {
+        ApiError::not_found("reconcile is not configured on this server (no [chain] endpoint)")
+    })?;
+    let outcome = reconciler
+        .reconcile(req)
+        .await
+        .map_err(ApiError::bad_request)?;
+
+    match outcome {
+        ReconcileOutcome::NotFound => Ok(Json(ReconcileView {
+            status: "not_found",
+            block_number: None,
+            gas_used: None,
+            recorded: false,
+            note: Some(
+                "no receipt yet — it may still confirm; retry later with the same tx_hash"
+                    .to_owned(),
+            ),
+        })),
+        ReconcileOutcome::Reverted {
+            block_number,
+            gas_used,
+        } => Ok(Json(ReconcileView {
+            status: "reverted",
+            block_number: Some(block_number),
+            gas_used: Some(gas_used),
+            recorded: false,
+            note: Some("mined but reverted — gas was spent, nothing to record".to_owned()),
+        })),
+        ReconcileOutcome::Confirmed {
+            block_number,
+            gas_used,
+            fill,
+        } => {
+            let (recorded, note) = match &state.store {
+                None => (
+                    false,
+                    Some("no [general] state_path configured — not recorded".to_owned()),
+                ),
+                Some(store) => {
+                    let recorded = record_reconciled_fill(store, &fill).await?;
+                    let note = (!recorded).then(|| {
+                        "no portfolio snapshot yet — run `sherwood run` at least once, or \
+                         reconcile from the CLI, which can bootstrap one"
+                            .to_owned()
+                    });
+                    (recorded, note)
+                }
+            };
+            Ok(Json(ReconcileView {
+                status: "confirmed",
+                block_number: Some(block_number),
+                gas_used: Some(gas_used),
+                recorded,
+                note,
+            }))
+        }
+    }
 }
 
 // ---- read-only views over the persisted state ----

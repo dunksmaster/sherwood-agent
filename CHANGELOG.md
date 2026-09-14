@@ -169,6 +169,21 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   unchanged (refactor, not new logic, on the CLI side). Verified live: `POST
   /v1/dex/simulate` for a real 5 USDG → NVDA swap returns `eth_call succeeded` against the
   live chain, same as the CLI command it wraps.
+- **Reconcile endpoint (v0.2.10).** `sherwood-server` gains `POST /v1/reconcile` (operator),
+  the same shape as v0.2.9's routes: wraps `sherwood-reconcile`'s `wait_and_reconcile`,
+  factored into `sherwood-cli::reconcile_preview` (`ChainReconciler`, implementing the new
+  `sherwood_server::state::Reconciler` trait — mirrors `DexSimulator` exactly). Reads a
+  receipt for a transaction hash the operator already broadcast with their own tooling
+  ([ADR-0007](docs/adr/0007-no-broadcast-capability.md)) — never sends anything. A
+  `confirmed` outcome records the fill (appended fill, updated portfolio snapshot, audit
+  row) only when `[general] state_path` is configured **and** a portfolio snapshot already
+  exists — the response's `recorded`/`note` fields say which; this route does not bootstrap
+  a snapshot the way `sherwood reconcile` on the CLI can. 7 new `sherwood-server` route
+  tests. Verified live against a real, already-mined transaction
+  (`0xe9655a4080436fccd158057cfafab080f247238e6fafa647902e60250fc36e13`): the `confirmed`
+  state with real `block_number`/`gas_used`, the no-snapshot-yet path, and — after seeding a
+  snapshot with `sherwood run` — the fill actually landing in `GET /v1/portfolio` (cash
+  983.61 → 783.11, a new 1 NVDA position at avg_cost 200) exactly as a paper fill would.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**

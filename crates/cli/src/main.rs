@@ -17,6 +17,7 @@ mod dex_simulate_cmd;
 mod feed;
 mod live_preflight;
 mod reconcile_cmd;
+mod reconcile_preview;
 mod route_cmd;
 mod runner;
 mod secrets_cmd;

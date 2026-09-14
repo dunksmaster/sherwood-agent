@@ -33,7 +33,7 @@ against the transaction's calldata — the receipt carries no calldata. Get
 the expected trade wrong and the *local* record is wrong; the chain itself
 is unaffected either way.
 
-## CLI
+## CLI and server
 
 ```
 sherwood reconcile <config.toml> <tx_hash> <symbol> <buy|sell> <qty> <price> [fee]
@@ -43,6 +43,12 @@ Polls for the receipt (up to 2 minutes). On success, if `[general]
 state_path` is configured, records the fill exactly the way a paper fill is
 recorded: an appended fill, an updated portfolio snapshot, an audit-chain
 row.
+
+`sherwood serve` exposes the same check over HTTP as `POST /v1/reconcile`
+(operator role, v0.2.10) — same logic, same boundary. One difference: the
+HTTP route does not bootstrap a portfolio snapshot the way the CLI command
+can (`starting_cash` isn't known to the server) — if none exists yet, it
+reports `recorded: false` with a note instead of guessing a starting cash.
 
 ## Not here
 

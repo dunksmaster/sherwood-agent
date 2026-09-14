@@ -25,6 +25,9 @@
 //! | POST | `/v1/hook/pretooluse` | operator | allow / deny one agent tool call |
 //! | POST | `/v1/mode` | admin + body re-auth | switch PAPER / LIVE |
 //! | POST | `/v1/kill` | admin + body re-auth | engage / release the kill switch |
+//! | POST | `/v1/route` | operator | which venue (AMM/RFQ) an order of this notional would use |
+//! | POST | `/v1/dex/simulate` | operator | `eth_call`-simulate a swap; signs and sends nothing |
+//! | POST | `/v1/reconcile` | operator | reconcile a tx hash the operator already broadcast |
 
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
@@ -115,6 +118,7 @@ pub fn router(state: AppState) -> Router {
         .route("/v1/kill", post(routes::post_kill))
         .route("/v1/route", post(routes::post_route))
         .route("/v1/dex/simulate", post(routes::post_dex_simulate))
+        .route("/v1/reconcile", post(routes::post_reconcile))
         .route_layer(from_fn_with_state(state.clone(), auth::require_auth));
 
     let mut app = Router::new()
@@ -1140,6 +1144,181 @@ mod tests {
                 Some(OPERATOR),
                 serde_json::json!({ "from": "0xabc", "token": "NVDA", "amount_in_raw": "1" }),
             ),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+        assert!(body_string(resp).await.contains("rpc unreachable"));
+    }
+
+    /// A stub `Reconciler` for tests — always returns the outcome it was
+    /// built with.
+    struct StubReconciler(Result<state::ReconcileOutcome, String>);
+
+    #[async_trait::async_trait]
+    impl state::Reconciler for StubReconciler {
+        async fn reconcile(
+            &self,
+            _req: state::ReconcileRequest,
+        ) -> Result<state::ReconcileOutcome, String> {
+            match &self.0 {
+                Ok(state::ReconcileOutcome::NotFound) => Ok(state::ReconcileOutcome::NotFound),
+                Ok(state::ReconcileOutcome::Reverted {
+                    block_number,
+                    gas_used,
+                }) => Ok(state::ReconcileOutcome::Reverted {
+                    block_number: *block_number,
+                    gas_used: *gas_used,
+                }),
+                Ok(state::ReconcileOutcome::Confirmed {
+                    block_number,
+                    gas_used,
+                    fill,
+                }) => Ok(state::ReconcileOutcome::Confirmed {
+                    block_number: *block_number,
+                    gas_used: *gas_used,
+                    fill: fill.clone(),
+                }),
+                Err(e) => Err(e.clone()),
+            }
+        }
+    }
+
+    fn reconcile_body() -> serde_json::Value {
+        serde_json::json!({
+            "tx_hash": "0xabc",
+            "symbol": "NVDA",
+            "side": "buy",
+            "qty": "1",
+            "price": "200"
+        })
+    }
+
+    #[tokio::test]
+    async fn reconcile_404s_when_not_configured() {
+        let resp = call(
+            test_state(),
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn reconcile_requires_operator_role() {
+        let state = test_state().with_reconciler(Arc::new(StubReconciler(Ok(
+            state::ReconcileOutcome::NotFound,
+        ))));
+        let resp = call(state, post("/v1/reconcile", Some(VIEWER), reconcile_body())).await;
+        assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn reconcile_not_found_is_reported_without_recording() {
+        let state = test_state().with_reconciler(Arc::new(StubReconciler(Ok(
+            state::ReconcileOutcome::NotFound,
+        ))));
+        let resp = call(
+            state,
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"status\":\"not_found\""), "{body}");
+        assert!(body.contains("\"recorded\":false"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn reconcile_reverted_is_reported_without_recording() {
+        let state = test_state().with_reconciler(Arc::new(StubReconciler(Ok(
+            state::ReconcileOutcome::Reverted {
+                block_number: 42,
+                gas_used: 21000,
+            },
+        ))));
+        let resp = call(
+            state,
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"status\":\"reverted\""), "{body}");
+        assert!(body.contains("\"recorded\":false"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn reconcile_confirmed_without_a_store_is_not_recorded() {
+        let state = test_state().with_reconciler(Arc::new(StubReconciler(Ok(
+            state::ReconcileOutcome::Confirmed {
+                block_number: 42,
+                gas_used: 21000,
+                fill: Fill {
+                    order_id: sherwood_core::OrderId::new("reconcile-0xabc"),
+                    asset: Asset::symbol("NVDA"),
+                    side: Side::Buy,
+                    qty: dec!(1),
+                    price: dec!(200),
+                    fee: dec!(0),
+                    venue: Venue::DexRouter,
+                    at: Utc::now(),
+                },
+            },
+        ))));
+        let resp = call(
+            state,
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"status\":\"confirmed\""), "{body}");
+        assert!(body.contains("\"recorded\":false"), "{body}");
+        assert!(body.contains("state_path"), "{body}");
+    }
+
+    #[tokio::test]
+    async fn reconcile_confirmed_with_a_snapshot_records_the_fill() {
+        let store = seeded_store().await;
+        let state = state_full(ServerOpts::default(), Some(store.clone())).with_reconciler(
+            Arc::new(StubReconciler(Ok(state::ReconcileOutcome::Confirmed {
+                block_number: 42,
+                gas_used: 21000,
+                fill: Fill {
+                    order_id: sherwood_core::OrderId::new("reconcile-0xabc"),
+                    asset: Asset::symbol("NVDA"),
+                    side: Side::Buy,
+                    qty: dec!(1),
+                    price: dec!(200),
+                    fee: dec!(0.5),
+                    venue: Venue::DexRouter,
+                    at: Utc::now(),
+                },
+            }))),
+        );
+        let resp = call(
+            state,
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
+        )
+        .await;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_string(resp).await;
+        assert!(body.contains("\"recorded\":true"), "{body}");
+
+        // seeded_store starts at cash 1000, applies a ROAR buy (2 @ 100 + 0.1
+        // fee -> 799.9), then this reconciled NVDA buy (1 @ 200 + 0.5 fee).
+        let portfolio = store.load_portfolio().await.unwrap().unwrap();
+        assert_eq!(portfolio.cash(), dec!(599.4));
+        assert_eq!(store.fills().await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn reconcile_surfaces_a_reconciler_error_as_bad_request() {
+        let state =
+            test_state().with_reconciler(Arc::new(StubReconciler(Err("rpc unreachable".into()))));
+        let resp = call(
+            state,
+            post("/v1/reconcile", Some(OPERATOR), reconcile_body()),
         )
         .await;
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
