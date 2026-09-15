@@ -387,7 +387,7 @@ impl Default for ServerSection {
             operator_token_ref: None,
             viewer_token_ref: None,
             allow_live: false,
-            rate_limit_per_min: 120,
+            rate_limit_per_min: 300,
             cors_origins: Vec::new(),
             static_dir: None,
             approval_mode: "auto".into(),

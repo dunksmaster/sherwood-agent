@@ -41,7 +41,7 @@ Roles are assigned by which configured token authenticates: `token_ref` → admi
 (a non-loopback bind is refused — TLS is a later concern). Tokens are generated into the
 `sherwood-secrets` vault on first `sherwood serve` and compared in constant time.
 
-A global fixed-window rate limit (`[server] rate_limit_per_min`, default 120) returns `429`
+A global fixed-window rate limit (`[server] rate_limit_per_min`, default 300) returns `429`
 with the standard envelope when exceeded. CORS headers are emitted only for origins listed in
 `[server] cors_origins`. With `[server] static_dir` set, the built dashboard is served at `/`
 (SPA fallback to `index.html`) with a strict CSP and hardening headers; `/v1/*` keeps
