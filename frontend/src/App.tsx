@@ -9,6 +9,7 @@ import { CashCurve } from "./views/CashCurve.tsx";
 import { ActivityList } from "./views/ActivityList.tsx";
 import { ApprovalsCard } from "./views/ApprovalsCard.tsx";
 import { Controls } from "./views/Controls.tsx";
+import { DexSimulateCard, ReconcileCard, RouteCard } from "./views/ChainTools.tsx";
 
 const POLL_MS = 4000;
 const MAX_EVENTS = 200;
@@ -114,6 +115,15 @@ function Dashboard({ token, onLogout }: { token: string; onLogout: () => void })
             error={activity.error}
             audit={audit.data}
           />
+        </div>
+        <div className="area-route">
+          <RouteCard token={token} />
+        </div>
+        <div className="area-reconcile">
+          <ReconcileCard token={token} />
+        </div>
+        <div className="area-dexsim">
+          <DexSimulateCard token={token} />
         </div>
         <div className="area-controls">
           <Controls

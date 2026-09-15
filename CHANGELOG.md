@@ -215,6 +215,15 @@ Until the first `v0.1.0` release the API and schema may change without notice.
   change writes it to disk, applies it to the running server (confirmed via `GET
   /v1/approvals` immediately reflecting the new mode), and reads back correctly through
   `GET /v1/config`.
+- **Dashboard views for router / dex-simulate / reconcile (v0.2.14).** `frontend/` gains
+  three cards (`ChainTools.tsx`): Router (a notional in, an AMM/RFQ decision out), DEX
+  simulate (`eth_call`-preview a swap, signs and sends nothing), and Reconcile (read a
+  receipt for a tx hash you already broadcast). Each is a self-contained form hitting its
+  matching operator endpoint from v0.2.9/v0.2.10. These are deliberately not hidden by role
+  in the UI — the dashboard has no way to know its own role client-side (no `/v1/whoami`),
+  and no existing card hides by role either; a wrong-role token surfaces the same 403 any
+  other failed call would. 4 new Playwright specs. Verified live against the real chain:
+  `POST /v1/route` for a real notional renders the actual AMM/RFQ decision in the card.
 
 ### Fixed
 - **`sherwood-dex` V4_SWAP: `hookData` offset was one word short, reverting every swap.**
