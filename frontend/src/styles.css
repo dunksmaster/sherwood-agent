@@ -118,6 +118,8 @@ h1 .dim {
     "portfolio approvals"
     "curve     curve"
     "activity  activity"
+    "route     reconcile"
+    "dexsim    dexsim"
     "controls  session";
   gap: 0;
   margin-top: 4px;
@@ -137,6 +139,15 @@ h1 .dim {
 .area-activity {
   grid-area: activity;
 }
+.area-route {
+  grid-area: route;
+}
+.area-reconcile {
+  grid-area: reconcile;
+}
+.area-dexsim {
+  grid-area: dexsim;
+}
 .area-controls {
   grid-area: controls;
 }
@@ -145,13 +156,17 @@ h1 .dim {
 }
 
 .area-portfolio > .card,
-.area-controls > .card {
+.area-controls > .card,
+.area-route > .card {
   border-right: 1px solid var(--border-soft);
 }
 
 .area-portfolio > .card,
 .area-approvals > .card,
-.area-curve > .card {
+.area-curve > .card,
+.area-route > .card,
+.area-reconcile > .card,
+.area-dexsim > .card {
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -168,11 +183,15 @@ h1 .dim {
       "approvals"
       "curve"
       "activity"
+      "route"
+      "reconcile"
+      "dexsim"
       "controls"
       "session";
   }
   .area-portfolio > .card,
-  .area-controls > .card {
+  .area-controls > .card,
+  .area-route > .card {
     border-right: none;
   }
   .area-controls > .card {
@@ -345,7 +364,8 @@ button.danger:hover:not(:disabled) {
   border-color: var(--danger);
 }
 
-input {
+input,
+select {
   font: inherit;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -355,7 +375,12 @@ input {
   transition: border-color 140ms var(--ease-out), box-shadow 140ms var(--ease-out);
 }
 
-input:focus-visible {
+select {
+  width: auto;
+}
+
+input:focus-visible,
+select:focus-visible {
   outline: none;
   border-color: var(--accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);

@@ -73,6 +73,49 @@ export interface ApprovalsView {
   approvals: Approval[];
 }
 
+export interface RouteView {
+  /** `"amm"` or `"rfq"`. */
+  venue: string;
+  reason: string;
+}
+
+export interface DexSimulateRequest {
+  from: string;
+  token: string;
+  amount_in_raw: string;
+  denom?: string;
+  slippage_bps?: number;
+}
+
+export interface DexSimulateOutcome {
+  token_symbol: string;
+  denom_symbol: string;
+  pool_fee: number;
+  pool_tick_spacing: number;
+  pool_liquidity: string;
+  amount_out_minimum: string;
+  calldata_hex: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ReconcileRequest {
+  tx_hash: string;
+  symbol: string;
+  side: "buy" | "sell";
+  qty: string;
+  price: string;
+  fee?: string;
+}
+
+export interface ReconcileView {
+  status: "not_found" | "reverted" | "confirmed";
+  block_number: number | null;
+  gas_used: number | null;
+  recorded: boolean;
+  note: string | null;
+}
+
 export interface SessionView {
   orders_used: number;
   orders_cap: number;
@@ -177,6 +220,21 @@ export const api = {
     req<Approval>(`/v1/approvals/${encodeURIComponent(id)}`, t, {
       method: "POST",
       body: JSON.stringify({ decision, reason }),
+    }),
+  route: (t: string, notional: string) =>
+    req<RouteView>("/v1/route", t, {
+      method: "POST",
+      body: JSON.stringify({ notional }),
+    }),
+  dexSimulate: (t: string, body: DexSimulateRequest) =>
+    req<DexSimulateOutcome>("/v1/dex/simulate", t, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  reconcile: (t: string, body: ReconcileRequest) =>
+    req<ReconcileView>("/v1/reconcile", t, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 };
 
