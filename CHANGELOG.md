@@ -8,6 +8,8 @@ Until the first `v0.1.0` release the API and schema may change without notice.
 
 ## [Unreleased]
 
+## [0.2.14] - 2026-09-15
+
 ### Added
 - **`sherwood-chain` — read-only EVM client (v0.2.1a).** New crate: an
   `EvmClient` trait over JSON-RPC (`HttpClient` on `reqwest`) with the reads
@@ -467,6 +469,7 @@ the workspace version remains `0.1.0` (the in-progress target).
   `PaperExecutor`; `RuleDecider` and an `AiDecider` closure wrapper.
 - The S0 documentation set under `docs/`, including three accepted ADRs.
 
-[Unreleased]: https://github.com/dunksmaster/sherwood-agent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/dunksmaster/sherwood-agent/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/dunksmaster/sherwood-agent/compare/v0.1.0...v0.2.14
 [0.1.0]: https://github.com/dunksmaster/sherwood-agent/compare/v0.0.1...v0.1.0
 [0.0.1]: https://github.com/dunksmaster/sherwood-agent/releases/tag/v0.0.1

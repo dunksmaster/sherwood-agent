@@ -187,20 +187,21 @@ is v0.2.
 - **Remaining for release (S16):** `git tag -a v0.1.0` + push + a GitHub release. Prepped:
   release notes, the CHANGELOG `[0.1.0]` section, SBOM in CI.
 
-**v0.2 (Robinhood Chain) — in progress, v0.2.0–v0.2.10 done.** v0.1's "Deferred to v0.2"
+**v0.2 (Robinhood Chain) — feature-complete, v0.2.0–v0.2.14.** v0.1's "Deferred to v0.2"
 line re-targeted early: the live venue is Robinhood Chain (an EVM L2), not the Agentic MCP
 ([ADR-0006](docs/adr/0006-robinhood-chain-venue.md)), and broadcasting a signed transaction
 is permanently out of scope for this codebase, not deferred
-([ADR-0007](docs/adr/0007-no-broadcast-capability.md)). Landed so far: a read-only EVM
-client and Uniswap v4 pool reads (`sherwood-chain`); a live price feed off the chain; a
-local signer and a multi-wallet registry (still no broadcast method anywhere); swap
-calldata construction + simulation (`sherwood-dex`, `sherwood dex-simulate`); AMM/RFQ
-venue routing (`sherwood-router`); a live pre-flight gate before arming Live mode; runner
-integration logging which wallet/venue a paper fill would have used; and order
-reconciliation against an already-broadcast tx hash (`sherwood-reconcile`), exposed over
-`sherwood serve` as `POST /v1/route`, `POST /v1/dex/simulate`, and `POST /v1/reconcile`.
-`sherwood run`/`sherwood serve` still cannot move funds under any config. Full step-by-step
-detail: [`docs/ROADMAP.md`](docs/ROADMAP.md#v02--robinhood-chain-evm).
+([ADR-0007](docs/adr/0007-no-broadcast-capability.md)). Landed: a read-only EVM client and
+Uniswap v4 pool reads (`sherwood-chain`); a live price feed off the chain; a local signer
+and a multi-wallet registry (still no broadcast method anywhere); swap calldata
+construction + simulation (`sherwood-dex`, `sherwood dex-simulate`); AMM/RFQ venue routing
+(`sherwood-router`); a live pre-flight gate before arming Live mode; runner integration
+logging which wallet/venue a paper fill would have used; order reconciliation against an
+already-broadcast tx hash (`sherwood-reconcile`); a `sherwood-config` crate shared between
+the CLI and server; a config editor (`GET`/`POST /v1/config`); and dashboard views for all
+of it. `sherwood run`/`sherwood serve` still cannot move funds under any config. See the
+[v0.2.14 release notes](docs/RELEASE-NOTES-0.2.14.md) and
+[`docs/ROADMAP.md`](docs/ROADMAP.md#v02--robinhood-chain-evm) for full detail.
 
 Roadmap and step list: [`docs/ROADMAP.md`](docs/ROADMAP.md). Component-by-component audit:
 [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
