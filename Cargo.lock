@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-chain"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-cli"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1945,7 +1945,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-config"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "anyhow",
  "rust_decimal",
@@ -1959,7 +1959,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-copytrade"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1973,7 +1973,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-core"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "chrono",
  "proptest",
@@ -1986,7 +1986,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-decision"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2003,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-dex"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "hex",
  "rust_decimal",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-events"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2030,7 +2030,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-execution"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2046,7 +2046,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-reconcile"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2061,7 +2061,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-router"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
@@ -2070,7 +2070,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-secrets"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "argon2",
  "chacha20poly1305",
@@ -2084,7 +2084,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-server"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "axum",
@@ -2115,7 +2115,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-signer"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "hex",
  "k256",
@@ -2127,7 +2127,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-sniper"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2141,7 +2141,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-store"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "sherwood-wallets"
-version = "0.1.0"
+version = "0.2.14"
 dependencies = [
  "rust_decimal",
  "rust_decimal_macros",
