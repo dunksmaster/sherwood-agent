@@ -40,6 +40,10 @@ tamper-evident audit log.
 Paper trading is the default. Live requires the venue connected, the admin role, and an
 explicit toggle.
 
+The dashboard is a small multi-page app: a public landing page at `/` explains what the
+project does and does not do before anyone logs in, `/login` takes an API token, and the
+authenticated `/app` and `/settings` routes sit behind a persistent nav bar.
+
 ## Scope
 
 | Milestone | Venue | What it does |
@@ -152,6 +156,12 @@ cargo run -p sherwood-cli -- backup config.toml ./backups
 # 6. Or start the local control-plane API (loopback, bearer token minted into
 #    the vault on first run). Exposes /v1/health and the PreToolUse order gate.
 cargo run -p sherwood-cli -- serve config.toml
+
+# 6b. In a second terminal, run the dashboard against it
+cd frontend && npm install && npm run dev
+# → http://localhost:5173/  (landing page, no token needed)
+#   /login redirects to /app once you paste the admin token from
+#   `sherwood secrets get api_token config.toml`
 ```
 
 `demo` replays a synthetic two-symbol series — a wiring demonstration, not a backtest. A
