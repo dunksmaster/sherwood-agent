@@ -1,10 +1,18 @@
 import { expect, test } from "@playwright/test";
 import { ADMIN_TOKEN, login, mockApi } from "./mocks.ts";
 
-test("shows the token gate before connecting", async ({ page }) => {
+test("shows the landing page at / with no token required", async ({ page }) => {
   await mockApi(page);
   await page.goto("/");
   await expect(page.getByText("sherwood")).toBeVisible();
+  await expect(page.getByText("PAPER TRADING")).toBeVisible();
+  await expect(page.getByPlaceholder("bearer token")).toHaveCount(0);
+  await expect(page.getByText("Portfolio")).toHaveCount(0);
+});
+
+test("shows the token gate at /login before connecting", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/login");
   await expect(page.getByPlaceholder("bearer token")).toBeVisible();
   await expect(page.getByRole("button", { name: "Connect" })).toBeDisabled();
   await expect(page.getByText("Portfolio")).toHaveCount(0);
@@ -30,7 +38,7 @@ test("a 401 on the first poll drops back to the login gate", async ({ page }) =>
   await page.route("**/v1/health", (r) =>
     r.fulfill({ status: 401, json: { code: "unauthorized", message: "bad token" } }),
   );
-  await page.goto("/");
+  await page.goto("/login");
   await page.getByPlaceholder("bearer token").fill(ADMIN_TOKEN);
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(page.getByPlaceholder("bearer token")).toBeVisible();

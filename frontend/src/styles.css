@@ -109,6 +109,45 @@ h1 .dim {
   flex-wrap: wrap;
 }
 
+/* ---------- secondary nav (authenticated routes) ------------------------ */
+/* Not `.topbar` — `DashboardPage` already renders one via `<StatusBar>`;
+   stacking two sticky brand headers on `/app` would look broken. */
+
+.subnav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.subnav-brand {
+  color: var(--muted-dim);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 2px;
+  border-bottom: 2px solid transparent;
+  font-size: 13px;
+}
+
+.nav-link:hover {
+  color: var(--text);
+}
+
+.nav-link-active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
 /* ---------- bento layout ------------------------------------------------ */
 
 .grid {
@@ -120,7 +159,7 @@ h1 .dim {
     "activity  activity"
     "route     reconcile"
     "dexsim    dexsim"
-    "controls  session";
+    "controls  controls";
   gap: 0;
   margin-top: 4px;
   align-items: start;
@@ -151,12 +190,8 @@ h1 .dim {
 .area-controls {
   grid-area: controls;
 }
-.area-session {
-  grid-area: session;
-}
 
 .area-portfolio > .card,
-.area-controls > .card,
 .area-route > .card {
   border-right: 1px solid var(--border-soft);
 }
@@ -170,8 +205,7 @@ h1 .dim {
   border-bottom: 1px solid var(--border-soft);
 }
 
-.area-controls > .card,
-.area-session > .card {
+.area-controls > .card {
   border-bottom: none;
 }
 
@@ -186,16 +220,11 @@ h1 .dim {
       "route"
       "reconcile"
       "dexsim"
-      "controls"
-      "session";
+      "controls";
   }
   .area-portfolio > .card,
-  .area-controls > .card,
   .area-route > .card {
     border-right: none;
-  }
-  .area-controls > .card {
-    border-bottom: 1px solid var(--border-soft);
   }
 }
 
