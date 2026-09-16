@@ -54,7 +54,7 @@ export async function mockApi(page: Page): Promise<void> {
 }
 
 export async function login(page: Page): Promise<void> {
-  await page.goto("/");
+  await page.goto("/login");
   await page.getByPlaceholder("bearer token").fill(ADMIN_TOKEN);
   await page.getByRole("button", { name: "Connect" }).click();
   await page.getByText("Portfolio").waitFor();
